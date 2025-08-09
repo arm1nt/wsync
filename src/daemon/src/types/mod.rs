@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
+pub(crate) mod errors;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct WorkspaceInformation {
     pub name: String,
