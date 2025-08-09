@@ -25,7 +25,6 @@ pub(crate) enum ConnectionInfo {
         host: String,
         port: u32,
         username: String,
-        password: Option<String>,
         identity_file: Option<PathBuf>
     },
     HostAlias {
