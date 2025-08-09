@@ -8,6 +8,7 @@ use log4rs::Config;
 use log4rs::config::{Appender, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use log::{error, info, warn, LevelFilter};
+use uuid::Uuid;
 use crate::handlers::handle_request;
 use crate::types::daemon_state::DaemonState;
 use crate::types::socket::UnlinkingListener;
@@ -74,8 +75,9 @@ fn server_loop(state: Arc<Mutex<DaemonState>>, shutdown: Arc<AtomicBool>) {
                 info!("Successfully established connection with a client");
                 consecutive_connection_failures = 0;
 
+                let req_id: Uuid = Uuid::new_v4();
                 let cloned_state = Arc::clone(&state);
-                let _handle = thread::spawn(move || { handle_request(stream, cloned_state) });
+                let _handle = thread::spawn(move || { handle_request(req_id, stream, cloned_state) });
             },
             Err(e) => {
                 error!("Failed to establish connection with a client: {e:?}");
