@@ -1,13 +1,17 @@
 use std::sync::{Arc, Mutex};
-use std::{process, thread};
+use std::{env, process, thread};
+use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use log4rs::append::console::{ConsoleAppender, Target};
 use log4rs::Config;
 use log4rs::config::{Appender, Root};
 use log4rs::encode::pattern::PatternEncoder;
-use log::{error, info, LevelFilter};
+use log::{error, info, warn, LevelFilter};
 use crate::handlers::handle_request;
 use crate::types::daemon_state::DaemonState;
 use crate::types::socket::UnlinkingListener;
+use crate::util::constants::SERVER_SOCKET_PATH_EN_VAR;
 use crate::util::error_exit;
 
 mod workspace_config;
@@ -42,11 +46,7 @@ fn setup_logging() {
     info!("Initialized logging framework");
 }
 
-fn server_loop(state: Arc<Mutex<DaemonState>>) {
-    info!("Starting wsync daemon server loop...");
-
-    let mut consecutive_connection_failures = 0;
-
+fn get_server_socket() -> UnlinkingListener {
     let listener: UnlinkingListener = match UnlinkingListener::bind() {
         Ok(listener) => listener,
         Err(e) => {
@@ -54,7 +54,21 @@ fn server_loop(state: Arc<Mutex<DaemonState>>) {
         }
     };
 
+    listener
+}
+
+fn server_loop(state: Arc<Mutex<DaemonState>>, shutdown: Arc<AtomicBool>) {
+    info!("Starting wsync daemon server loop...");
+
+    let mut consecutive_connection_failures = 0;
+    let listener: UnlinkingListener = get_server_socket();
+
     for stream in listener.listener.incoming() {
+        if shutdown.load(Ordering::Relaxed) {
+            warn!("wsync daemon server socket interrupted. Exiting server loop...");
+            break;
+        }
+
         match stream {
             Ok(stream) => {
                 info!("Successfully established connection with a client");
@@ -84,6 +98,11 @@ fn server_loop(state: Arc<Mutex<DaemonState>>) {
     info!("Terminated wsync daemon server loop");
 }
 
+fn sigint_handler(shutdown: Arc<AtomicBool>) {
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = UnixStream::connect(PathBuf::from(env::var(SERVER_SOCKET_PATH_EN_VAR).unwrap()));
+}
+
 fn main() {
     println!("Starting wsync daemon...");
     setup_logging();
@@ -91,5 +110,12 @@ fn main() {
     let state: Arc<Mutex<DaemonState>> = DaemonState::init();
     state.lock().unwrap().restore();
 
-    server_loop(state);
+    let shutdown: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
+    let shutdown_cloned = Arc::clone(&shutdown);
+
+    ctrlc::set_handler(move || { sigint_handler(Arc::clone(&shutdown_cloned)) }).unwrap_or_else(|e| {
+        error_exit(Some(format!("Unable to set SIGINT error handler: {e:?}")))
+    });
+
+    server_loop(state, Arc::clone(&shutdown));
 }
