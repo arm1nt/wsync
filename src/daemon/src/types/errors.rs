@@ -1,11 +1,16 @@
+use std::fmt::{Debug, Display};
+
+#[derive(Debug)]
 pub(crate) struct WsConfigError {
     pub msg: String
 }
 
+#[derive(Debug)]
 pub(crate) struct MonitorManagerError {
     pub msg: String
 }
 
+#[derive(Debug)]
 pub(crate) struct SocketError {
     pub msg: String
 }
