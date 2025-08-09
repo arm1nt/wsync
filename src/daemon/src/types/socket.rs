@@ -1,12 +1,13 @@
 use std::env;
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
+use log::info;
 use crate::types::errors::SocketError;
 use crate::util::constants::SERVER_SOCKET_PATH_EN_VAR;
 
 pub(crate) struct UnlinkingListener {
     path: PathBuf,
-    listener: UnixListener
+    pub listener: UnixListener
 }
 
 impl UnlinkingListener {
