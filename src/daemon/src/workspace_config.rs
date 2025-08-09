@@ -25,7 +25,17 @@ impl WorkspaceConfiguration {
             }
         };
 
-        WorkspaceConfiguration { path: PathBuf::from(ws_config_file_path) }
+        let path: PathBuf = PathBuf::from(&ws_config_file_path);
+
+        if !path.exists() {
+            error_exit(Some(format!("There exists no workspace config file at path '{:?}'", &ws_config_file_path)));
+        }
+
+        if !path.is_file() {
+            error_exit(Some(format!("Workspace config file path '{:?}' does not point to a file", &ws_config_file_path)));
+        }
+
+        WorkspaceConfiguration { path }
     }
 
     pub fn parse(&self) -> Result<Vec<WorkspaceInformation>, WsConfigError> {
