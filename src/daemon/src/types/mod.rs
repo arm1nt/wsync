@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 pub(crate) mod errors;
+pub(crate) mod socket;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct WorkspaceInformation {
