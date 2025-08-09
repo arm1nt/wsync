@@ -1,15 +1,23 @@
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use strum_macros::{AsRefStr, EnumString};
 
 /// Exhaustive enumeration of all commands understood and accepted by the wsync daemon.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, EnumString, AsRefStr)]
 pub enum Command {
+    #[strum(serialize="workspace_info")]
     WorkspaceInfo,
+    #[strum(serialize="list_workspaces")]
     ListWorkspaces,
+    #[strum(serialize="list_workspace_info")]
     ListWorkspaceInfo,
+    #[strum(serialize="add_workspace")]
     AddWorkspace,
+    #[strum(serialize="remove_workspace")]
     RemoveWorkspace,
+    #[strum(serialize="attach_remote_workspace")]
     AttachRemoteWorkspace,
+    #[strum(serialize="detach_remote_workspace")]
     DetachRemoteWorkspace
 }
 
@@ -72,4 +80,15 @@ pub struct Response {
     pub code: ResponseCode,
     pub complete: bool,
     pub msg: Option<String>
+}
+
+impl Response {
+
+    pub fn success(msg: Option<String>) -> Self {
+        Response { code: ResponseCode::SUCCESS, complete: true, msg }
+    }
+
+    pub fn error(msg: Option<String>) -> Self {
+        Response { code: ResponseCode::ERROR, complete: true, msg }
+    }
 }
