@@ -1,6 +1,7 @@
 use std::env;
 use std::fs::File;
 use std::path::PathBuf;
+use log::trace;
 use crate::types::{RemoteWorkspace, WorkspaceInformation};
 use crate::types::errors::WsConfigError;
 use crate::util::constants::WS_CONFIG_ENV_VAR;
@@ -9,10 +10,6 @@ use crate::util::error_exit;
 /// Not thread-safe and no guarantees as to when changes are persisted
 pub(crate) struct WorkspaceConfiguration {
     path: PathBuf
-}
-
-pub(crate) struct Error {
-    msg: String
 }
 
 impl WorkspaceConfiguration {
@@ -48,6 +45,26 @@ impl WorkspaceConfiguration {
         })?;
 
         Ok(ws_entries)
+    }
+
+    pub fn find_by_name(&self, workspace_id: String) -> Result<Option<WorkspaceInformation>, WsConfigError> {
+        trace!("find_by_name({workspace_id})");
+
+        let config_entries = self.parse()?;
+
+        let mut result: Vec<WorkspaceInformation> = config_entries
+            .into_iter()
+            .filter(|entry| entry.name == workspace_id)
+            .collect();
+
+        if result.len() == 0 {
+            Ok(None)
+        } else if result.len() == 1 {
+            Ok(result.pop())
+        } else {
+            let error_msg = "Illegal state: The workspace config file contains multiple workspace entries with the same name";
+            error_exit(Some(error_msg.to_string()))
+        }
     }
 
     pub fn add_workspace(&self, workspace: &WorkspaceInformation) -> Result<(), WsConfigError> {
