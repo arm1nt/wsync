@@ -1,89 +1,156 @@
 use std::env;
 use std::fs::File;
-use std::path::PathBuf;
-use log::trace;
+use std::io::{BufReader, BufWriter, Write};
+use std::path::{Path, PathBuf};
 use crate::types::{RemoteWorkspace, WorkspaceInformation};
 use crate::types::errors::WsConfigError;
 use crate::util::constants::WS_CONFIG_ENV_VAR;
-use crate::util::error_exit;
 
 /// Not thread-safe and no guarantees as to when changes are persisted
 pub(crate) struct WorkspaceConfiguration {
-    path: PathBuf
+    path: PathBuf,
+    cached_entries: Vec<WorkspaceInformation>
 }
 
 impl WorkspaceConfiguration {
 
-    pub fn init() -> Self {
-        let ws_config_file_path = match env::var(WS_CONFIG_ENV_VAR) {
-            Ok(val) => val,
-            Err(_) => {
-                error_exit(Some(format!("Cannot find the workspace config file because {WS_CONFIG_ENV_VAR} is not set!")));
-            }
-        };
+    pub fn init() -> Result<Self, WsConfigError> {
+        let ws_config_file_path = env::var(WS_CONFIG_ENV_VAR).map_err(|e| {
+            WsConfigError::new(format!("{WS_CONFIG_ENV_VAR} is not set!"))
+        })?;
 
-        let path: PathBuf = PathBuf::from(&ws_config_file_path);
-
+        let path = PathBuf::from(&ws_config_file_path);
         if !path.exists() {
-            error_exit(Some(format!("There exists no workspace config file at path '{:?}'", &ws_config_file_path)));
+            return Err(WsConfigError::new(
+                format!("Workspace config file does not exist at path '{ws_config_file_path:?}'")
+            ));
         }
-
         if !path.is_file() {
-            error_exit(Some(format!("Workspace config file path '{:?}' does not point to a file", &ws_config_file_path)));
+            return Err(WsConfigError::new(
+                format!("Workspace config path is not a file '{ws_config_file_path:?}'")
+            ));
         }
 
-        WorkspaceConfiguration { path }
+        let config_entries: Vec<WorkspaceInformation> = Self::read_file(&path)?;
+
+        Ok( Self { path, cached_entries: config_entries })
     }
 
-    pub fn parse(&self) -> Result<Vec<WorkspaceInformation>, WsConfigError> {
-        let file = File::open(&self.path).map_err(|e| {
-            WsConfigError::new(e.to_string())
-        })?;
-
-        let ws_entries: Vec<WorkspaceInformation> = serde_json::from_reader(file).map_err(|e| {
-            WsConfigError::new(e.to_string())
-        })?;
-
-        Ok(ws_entries)
+    pub fn all(&self) -> Vec<WorkspaceInformation> {
+        self.cached_entries.clone()
     }
 
-    pub fn find_by_name(&self, workspace_id: String) -> Result<Option<WorkspaceInformation>, WsConfigError> {
-        trace!("find_by_name({workspace_id})");
+    pub fn find_by_name(&self, workspace_id: String) -> Option<WorkspaceInformation> {
+        self.cached_entries
+            .iter()
+            .find(|entry| entry.name == workspace_id)
+            .map(|e| e.clone())
+    }
 
-        let config_entries = self.parse()?;
+    fn find_by_name_mut(&mut self, workspace_id: String) -> Option<&mut WorkspaceInformation> {
+        self.cached_entries.iter_mut().find(|entry| entry.name == workspace_id)
+    }
 
-        let mut result: Vec<WorkspaceInformation> = config_entries
-            .into_iter()
-            .filter(|entry| entry.name == workspace_id)
+    pub fn add_workspace(&mut self, workspace: WorkspaceInformation) -> Result<(), WsConfigError> {
+        let conflicting_entries: Vec<&WorkspaceInformation> = self.cached_entries
+            .iter()
+            .filter(|entry| entry.name == workspace.name || entry.local_path == workspace.local_path)
             .collect();
 
-        if result.len() == 0 {
-            Ok(None)
-        } else if result.len() == 1 {
-            Ok(result.pop())
-        } else {
-            let error_msg = "Illegal state: The workspace config file contains multiple workspace entries with the same name";
-            error_exit(Some(error_msg.to_string()))
+        if !conflicting_entries.is_empty() {
+            return Err(WsConfigError::new(
+                format!("Local workspace with this name or at this local path already exists: {:?}", conflicting_entries)
+            ));
         }
+
+        self.cached_entries.push(workspace);
+        self.write_file()?;
+        Ok(())
     }
 
-    pub fn add_workspace(&self, workspace: &WorkspaceInformation) -> Result<(), WsConfigError> {
-        todo!()
+    pub fn remove_workspace(&mut self, workspace_id: String) -> Result<(), WsConfigError> {
+        let elements_before = self.cached_entries.len();
+        self.cached_entries.retain(|entry| entry.name != workspace_id);
+
+        if self.cached_entries.len() == elements_before {
+            return Err(WsConfigError::new(
+                format!("No workspace named '{workspace_id}' found")
+            ));
+        }
+
+        self.write_file()?;
+        Ok(())
     }
 
-    pub fn remove_workspace(&self, workspace_id: String) -> Result<(), WsConfigError> {
-        todo!()
+    pub fn attach_remote_workspace(
+        &mut self,
+        workspace_id: String,
+        remote_workspace: RemoteWorkspace
+    ) -> Result<(), WsConfigError> {
+        let entry = self.find_by_name_mut(workspace_id.clone()).ok_or_else(|| {
+            WsConfigError::new(format!("No local workspace named '{workspace_id}' exists"))
+        })?;
+
+        if entry.remote_workspaces.iter().any(|rw| rw.name == remote_workspace.name) {
+            return Err(WsConfigError::new(
+                format!("Remote Workspace named '{}' is already attached to local workspace '{workspace_id}", remote_workspace.name)
+            ));
+        }
+
+        entry.remote_workspaces.push(remote_workspace);
+        self.write_file()?;
+        Ok(())
     }
 
-    pub fn attach_remote_workspace(&self, workspace_id: String, remote_workspace: RemoteWorkspace) -> Result<(), WsConfigError> {
-        todo!()
+    pub fn detach_remote_workspace(
+        &mut self,
+        workspace_id: String,
+        remote_workspace_id: String
+    ) -> Result<(), WsConfigError> {
+        let entry = self.find_by_name_mut(workspace_id.clone()).ok_or_else(|| {
+            WsConfigError::new(format!("No local workspace named '{workspace_id}' exists"))
+        })?;
+
+        let rw_before = entry.remote_workspaces.len();
+        entry.remote_workspaces.retain(|rw| rw.name != remote_workspace_id);
+
+        if entry.remote_workspaces.len() == rw_before {
+            return Err(WsConfigError::new(
+                format!("No remote workspace named '{remote_workspace_id}' attached to local workspace '{workspace_id}'")
+            ));
+        }
+
+        self.write_file()?;
+        Ok(())
     }
 
-    pub fn detach_remote_workspace(&self, workspace_id: String, remote_workspace_id: String) -> Result<(), WsConfigError> {
-        todo!()
+    fn read_file(path: &Path) -> Result<Vec<WorkspaceInformation>, WsConfigError> {
+        let file = File::open(path).map_err(|e|
+            WsConfigError::new(format!("Opening ws config file failed: {e}"))
+        )?;
+
+        let reader = BufReader::new(file);
+        serde_json::from_reader(reader).map_err(|e|
+            WsConfigError::new(format!("Parsing ws config file failed: {e}"))
+        )
     }
 
-    fn update_config_file(&self, config_entries: Vec<WorkspaceInformation>) -> Result<(), WsConfigError> {
-        todo!()
+    fn write_file(&self) -> Result<(), WsConfigError> {
+        // Todo: Before writing out changes, write to a temp file
+
+        let file = File::options().truncate(true).write(true).open(&self.path).map_err(|e| {
+            WsConfigError::new(format!("Unable to update workspaces config file: {e:?}"))
+        })?;
+
+        let mut writer = BufWriter::new(file);
+        serde_json::to_writer_pretty(&mut writer, &self.cached_entries).map_err(|e| {
+            WsConfigError::new(format!("Unable to update ws config file: {e}"))
+        })?;
+        writer.flush().map_err(|e|
+            WsConfigError::new(format!("Unable to write ws config changes to file: {e}"))
+        )?;
+
+        Ok(())
     }
+
 }
