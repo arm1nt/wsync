@@ -9,7 +9,7 @@ use log4rs::config::{Appender, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use log::{error, info, warn, LevelFilter};
 use uuid::Uuid;
-use crate::handlers::handle_request;
+use crate::handler::handle_request;
 use crate::types::daemon_state::DaemonState;
 use crate::types::socket::UnlinkingListener;
 use crate::util::constants::SERVER_SOCKET_PATH_EN_VAR;
@@ -19,11 +19,12 @@ mod workspace_config;
 mod util;
 mod types;
 mod monitor_manager;
-mod handlers;
+mod handler;
 
 const MAX_CONSECUTIVE_CONNECTION_FAILURES: i32 = 10;
 
 fn setup_logging() {
+    // Todo: Configure in a separate config file instead
     let stdout = ConsoleAppender::builder()
         .target(Target::Stdout)
         .encoder(Box::new(PatternEncoder::new("{h({d(%Y-%m-%d %H:%M:%S)} - [{l}]: {m}{n})}")))
@@ -72,10 +73,10 @@ fn server_loop(state: Arc<Mutex<DaemonState>>, shutdown: Arc<AtomicBool>) {
 
         match stream {
             Ok(stream) => {
-                info!("Successfully established connection with a client");
                 consecutive_connection_failures = 0;
-
                 let req_id: Uuid = Uuid::new_v4();
+                info!("[{req_id}] Successfully established connection with a client");
+
                 let cloned_state = Arc::clone(&state);
                 let _handle = thread::spawn(move || { handle_request(req_id, stream, cloned_state) });
             },
