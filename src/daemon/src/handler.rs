@@ -123,7 +123,7 @@ pub(crate) fn handle_request(req_id: Uuid, mut stream: UnixStream, state: Arc<Mu
     let command_handler_result = match command {
         Command::WorkspaceInfo => handle_workspace_info_cmd(req_id, reader, &mut writer, state),
         Command::ListWorkspaces => handle_list_workspaces_cmd(req_id, &mut writer, state),
-        Command::ListWorkspaceInfo => handle_list_workspace_info_cmd(req_id, reader, &mut writer, state),
+        Command::ListWorkspaceInfo => handle_list_workspace_info_cmd(req_id, &mut writer, state),
         Command::AddWorkspace => handle_add_workspace_cmd(req_id, reader, &mut writer, state),
         Command::RemoveWorkspace => handle_remove_workspace_cmd(req_id, reader, &mut writer, state),
         Command::AttachRemoteWorkspace => handle_attach_remote_workspace_cmd(req_id, reader, &mut writer, state),
@@ -196,12 +196,23 @@ fn handle_list_workspaces_cmd(
 
 fn handle_list_workspace_info_cmd(
     req_id: Uuid,
-    mut reader: BufReader<UnixStream>,
     mut writer: &mut BufWriter<UnixStream>,
     state: Arc<Mutex<DaemonState>>
 ) -> Result<(), String> {
     debug!("[{req_id}] Handling list workspace info command");
-    todo!()
+
+    let daemon_state = state.lock().unwrap();
+
+    let ws_config_entries = daemon_state.ws_config
+        .parse()
+        .map_err(|e| { e.msg })?;
+
+    drop(daemon_state);
+
+    let response = Response::map_to_success(ws_config_entries)?;
+    send_response(&mut writer, &response);
+
+    Ok(())
 }
 
 fn handle_add_workspace_cmd(
