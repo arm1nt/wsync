@@ -1,256 +1,186 @@
-use std::fmt::format;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::fmt::{format, Debug};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::ptr::read;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use log::{debug, info, warn};
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Serialize};
+use serde_json::Deserializer;
 use uuid::Uuid;
-use daemon_interface::{Command, Response, WorkspaceInfoRequest};
+use daemon_interface::{AddWorkspaceRequest, AttachRemoteWorkspaceRequest, Command, RemoveWorkspaceRequest, Response, WorkspaceInfoRequest};
 use crate::types::daemon_state::DaemonState;
+use crate::types::{ConnectionInfo, RemoteWorkspace, WorkspaceInformation};
+use crate::types::errors::{ClientError, HandlerError};
+use crate::workspace_config::WorkspaceConfiguration;
 
-struct HandlerError {
-    error_msg_to_log: String,
-    error_msg_for_user: String
+struct Client {
+    reader: BufReader<UnixStream>,
+    writer: BufWriter<UnixStream>
 }
 
-fn get_buffered_reader(stream: &UnixStream) -> Result<BufReader<UnixStream>, String> {
-    let reader = BufReader::new(stream.try_clone().map_err(|e| {
-        format!("Unable to create buffered reader needed to read client data: {e:?}").to_string()
-    })?);
+impl Client {
+    fn new(stream: UnixStream) -> Result<Self, ClientError> {
+        let r = stream.try_clone()?;
+        let w = stream;
+        Ok( Self { reader: BufReader::new(r), writer: BufWriter::new(w)} )
+    }
 
-    Ok(reader)
-}
+    fn read_line(&mut self) -> Result<String, ClientError> {
+        let mut buf = String::new();
+        let bytes_read = self.reader.read_line(&mut buf)?;
 
-fn get_buffered_writer(stream: &UnixStream) -> Result<BufWriter<UnixStream>, String> {
-    let writer = BufWriter::new(stream.try_clone().map_err(|e| {
-        format!("Unable to create buffered writer needed to send data to the client: {e:?}").to_string()
-    })?);
-
-    Ok(writer)
-}
-
-fn read_line(mut reader: &mut BufReader<UnixStream>) -> Result<String, String> {
-    let mut buffer: String = String::new();
-
-    match reader.read_line(&mut buffer) {
-        Ok(read_bytes) => {
-            if read_bytes == 0 {
-                return Err("Connection was closed before being able to read the req. data sent by the client".to_string());
-            }
-            Ok(buffer)
-        },
-        Err(e) => {
-            Err(format!("Unable to read the req. data sent by the client: {:?}", e.to_string()))
+        if bytes_read == 0 {
+            return Err(ClientError::Protocol("Connection closed before reading request data"));
         }
+
+        Ok(buf)
+    }
+
+    fn read_json<T: DeserializeOwned>(&mut self) -> Result<T, ClientError> {
+        let mut stream = Deserializer::from_reader(&mut self.reader).into_iter::<T>();
+        let data = stream.next();
+
+        if data.is_none() {
+            return Err(ClientError::Protocol("Missing command data"));
+        }
+
+        Ok(data.unwrap()?)
+    }
+
+    fn write_json<T: Serialize>(&mut self, data: &T) -> Result<(), ClientError> {
+        serde_json::to_writer(&mut self.writer, data)?;
+        self.writer.flush()?;
+        Ok(())
+    }
+
+    fn shutdown(&mut self) {
+        let _ = self.writer.get_ref().shutdown(Shutdown::Both);
     }
 }
 
-fn get_request_json<T: DeserializeOwned>(mut reader: &mut BufReader<UnixStream>) -> Result<T, String> {
-    let data = read_line(&mut reader)?;
-
-    let value: T = serde_json::from_str(data.trim()).map_err(|e| {
-        format!("Unable to deserialize received req. data '{data}: {e:?}'")
-    })?;
-
-    Ok(value)
-}
-
-fn send_response(mut writer: &mut BufWriter<UnixStream>, response: &Response) -> Result<(), String> {
-    let json =  match serde_json::to_string(response) {
-        Ok(json) => json,
-        Err(e) => return Err(format!("Unable to serialize '{:?}': {e:?}", response))
-    };
-
-    writeln!(writer, "{json}").map_err(|e| {
-        format!("Unable to write {json} to socket: {e:?}")
-    })?;
-
-    writer.flush().map_err(|e| { format!("Unable to send response to client: {e:?}") })?;
-
-    Ok(())
-}
-
-fn get_command(mut reader: &mut BufReader<UnixStream>) -> Result<Command, String> {
-    let rcv_command_str = read_line(&mut reader)?;
-
-    match Command::from_str(rcv_command_str.trim()) {
-        Ok(command) => Ok(command),
-        Err(e) => Err(format!("Received invalid command '{}': {e:?}", rcv_command_str.trim()))
-    }
-}
-
-pub(crate) fn handle_request(req_id: Uuid, mut stream: UnixStream, state: Arc<Mutex<DaemonState>>) {
+pub(crate) fn handle_request(req_id: Uuid, stream: UnixStream, state: Arc<Mutex<DaemonState>>) {
     let start = Instant::now();
     info!("[{req_id}] BEGIN - Start handling request ...");
 
-    let mut reader = match get_buffered_reader(&stream) {
-        Ok(reader) => reader,
+    let mut client = match Client::new(stream) {
+        Ok(client) => client,
         Err(e) => {
-            warn!("[{req_id}] Cannot handle request: {e:?}");
+            warn!("[{req_id}] {e}");
             info!("[{req_id}] END - Done handling request (elapsed time: {:?})", Instant::now() - start);
-            let _ = stream.shutdown(Shutdown::Both);
             return;
         }
     };
 
-    let mut writer = match get_buffered_writer(&stream) {
-        Ok(writer) => writer,
-        Err(e) => {
-            warn!("[{req_id}] Cannot handle request: {e:?}");
-            info!("[{req_id}] END - Done handling request (elapsed time: {:?})", Instant::now() - start);
-            let _ = stream.shutdown(Shutdown::Both);
-            return;
-        }
-    };
-
-    let command: Command = match get_command(&mut reader) {
+    let mut command = match get_command(&mut client) {
         Ok(command) => command,
         Err(e) => {
-            warn!("[{req_id}] Cannot handle request: {e:?}");
-            let _ = send_response(&mut writer, &Response::error(Some(e)));
+            if let Some(msg) = e.log { warn!("{}", msg)}
+            let _= client.write_json(&Response::error(e.client));
             info!("[{req_id}] END - Done handling request (elapsed time: {:?})", Instant::now() - start);
-            let _ = stream.shutdown(Shutdown::Both);
+            client.shutdown();
             return;
         }
     };
 
     let command_handler_result = match command {
-        Command::WorkspaceInfo => handle_workspace_info_cmd(req_id, reader, &mut writer, state),
-        Command::ListWorkspaces => handle_list_workspaces_cmd(req_id, &mut writer, state),
-        Command::ListWorkspaceInfo => handle_list_workspace_info_cmd(req_id, &mut writer, state),
-        Command::AddWorkspace => handle_add_workspace_cmd(req_id, reader, &mut writer, state),
-        Command::RemoveWorkspace => handle_remove_workspace_cmd(req_id, reader, &mut writer, state),
-        Command::AttachRemoteWorkspace => handle_attach_remote_workspace_cmd(req_id, reader, &mut writer, state),
-        Command::DetachRemoteWorkspace => handle_detach_remote_workspace_cmd(req_id, reader, &mut writer, state)
+        Command::WorkspaceInfo => handle_workspace_info_cmd(req_id, &mut client, state),
+        Command::ListWorkspaces => handle_list_workspaces_cmd(req_id, &mut client, state),
+        Command::ListWorkspaceInfo => handle_list_workspace_info_cmd(req_id, &mut client, state),
+        Command::AddWorkspace => handle_add_workspace_cmd(req_id, &mut client, state),
+        Command::RemoveWorkspace => handle_remove_workspace_cmd(req_id, &mut client, state),
+        Command::AttachRemoteWorkspace => handle_attach_remote_workspace_cmd(req_id, &mut client, state),
+        Command::DetachRemoteWorkspace => handle_detach_remote_workspace_cmd(req_id, &mut client, state)
     };
 
-    if command_handler_result.is_err() {
-        let error = command_handler_result.err().unwrap();
-        warn!("[{req_id}] Cannot handle request: {error}");
-        let _ = send_response(&mut writer, &Response::error(Some(error)));
+    if let Err(err) = command_handler_result {
+        if let Some(msg) = err.log { warn!("{}", msg)}
+        let _ = client.write_json(&Response::error(err.client));
     }
 
     info!("[{req_id}] END - Done handling request (elapsed time: {:?})", Instant::now() - start);
-    let _ = stream.shutdown(Shutdown::Both);
+    client.shutdown();
+}
+
+fn get_command(client: &mut Client) -> Result<Command, HandlerError> {
+    let rcvd_raw_command = client.read_line().map_err(|e| {
+        HandlerError::both(
+            format!("Failed to read command data: {e}"),
+            "Failed to read command data"
+        )
+    })?;
+
+    match Command::from_str(rcvd_raw_command.trim()) {
+        Ok(command) => Ok(command),
+        Err(e) => Err(HandlerError::both(
+            format!("Received invalid command '{}': {e}", rcvd_raw_command.trim()),
+            format!("Received invalid command '{}'", rcvd_raw_command.trim())
+        ))
+    }
 }
 
 fn handle_workspace_info_cmd(
     req_id: Uuid,
-    mut reader: BufReader<UnixStream>,
-    mut writer: &mut BufWriter<UnixStream>,
+    client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), String> {
-    debug!("[{req_id}] Handling workspace info command");
-
-    let data: WorkspaceInfoRequest = get_request_json(&mut reader)?;
-
-    let daemon_state = state.lock().unwrap();
-
-    let ws_config_entry = daemon_state.ws_config
-        .find_by_name(data.name.clone())
-        .map_err(|e| { e.msg })?;
-
-    drop(daemon_state);
-
-    let response: Response = match ws_config_entry {
-        Some(entry) => Response::map_to_success(entry)?,
-        None => Response::not_found(Some(format!("No workspace with the name '{}' exists", data.name)))
-    };
-
-    send_response(&mut writer, &response)?;
-
-    Ok(())
+) -> Result<(), HandlerError> {
+    debug!("[{req_id}] Handling 'workspace_info' command...");
+    todo!()
 }
 
 fn handle_list_workspaces_cmd(
     req_id: Uuid,
-    mut writer: &mut BufWriter<UnixStream>,
+    client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), String> {
-    debug!("[{req_id}] Handling list workspaces command");
-
-    let daemon_state = state.lock().unwrap();
-
-    let ws_config_entries: Vec<(String, PathBuf)> = daemon_state.ws_config
-        .parse()
-        .map_err(|e| { e.msg })?
-        .iter()
-        .map(|entry| {
-            (entry.name.clone(), entry.local_path.clone())
-        })
-        .collect();
-
-    drop(daemon_state);
-
-    let response = Response::map_to_success(ws_config_entries)?;
-    send_response(&mut writer, &response)?;
-
-    Ok(())
+) -> Result<(), HandlerError> {
+    debug!("[{req_id}] Handling 'list_workspaces' command...");
+    todo!()
 }
 
 fn handle_list_workspace_info_cmd(
     req_id: Uuid,
-    mut writer: &mut BufWriter<UnixStream>,
+    client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), String> {
-    debug!("[{req_id}] Handling list workspace info command");
-
-    let daemon_state = state.lock().unwrap();
-
-    let ws_config_entries = daemon_state.ws_config
-        .parse()
-        .map_err(|e| { e.msg })?;
-
-    drop(daemon_state);
-
-    let response = Response::map_to_success(ws_config_entries)?;
-    send_response(&mut writer, &response);
-
-    Ok(())
+) -> Result<(), HandlerError> {
+    debug!("[{req_id}] Handling 'list_workspace_info' command...");
+    todo!()
 }
 
 fn handle_add_workspace_cmd(
     req_id: Uuid,
-    mut reader: BufReader<UnixStream>,
-    mut writer: &mut BufWriter<UnixStream>,
+    client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), String> {
-    debug!("[{req_id}] Handling add workspace command");
+) -> Result<(), HandlerError> {
+    debug!("[{req_id}] Handling 'add_workspace' command...");
     todo!()
 }
 
 fn handle_remove_workspace_cmd(
     req_id: Uuid,
-    mut reader: BufReader<UnixStream>,
-    mut writer: &mut BufWriter<UnixStream>,
+    client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), String> {
-    debug!("[{req_id}] Handling remove workspace command");
+) -> Result<(), HandlerError> {
+    debug!("[{req_id}] Handling 'remove_workspace' command...");
     todo!()
 }
 
 fn handle_attach_remote_workspace_cmd(
     req_id: Uuid,
-    mut reader: BufReader<UnixStream>,
-    mut writer: &mut BufWriter<UnixStream>,
+    client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), String> {
-    debug!("[{req_id}] Handling attach remote workspace command");
+) -> Result<(), HandlerError> {
+    debug!("[{req_id}] Handling 'attach_remote_workspace' command...");
     todo!()
 }
 
 fn handle_detach_remote_workspace_cmd(
     req_id: Uuid,
-    mut reader: BufReader<UnixStream>,
-    mut writer: &mut BufWriter<UnixStream>,
+    client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), String> {
-    debug!("[{req_id}] Handling detach remote workspace command");
+) -> Result<(), HandlerError> {
+    debug!("[{req_id}] Handling 'detach_remote_workspace' command...");
     todo!()
 }
