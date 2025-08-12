@@ -177,7 +177,11 @@ fn handle_list_workspaces_cmd(
     debug!("[{req_id}] Handling 'list_workspaces' command...");
 
     let guard = state.lock().unwrap();
-    let ws_entries = guard.ws_config.all();
+    let mut ws_entries: Vec<(String, PathBuf)> = guard.ws_config
+        .all()
+        .into_iter()
+        .map(|entry| (entry.name, entry.local_path))
+        .collect();
     drop(guard);
 
     debug!("Found #{} workspaces: {:?}", ws_entries.len(), ws_entries);
