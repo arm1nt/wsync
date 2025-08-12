@@ -40,10 +40,10 @@ impl WorkspaceConfiguration {
         self.cached_entries.clone()
     }
 
-    pub fn find_by_name(&self, workspace_id: String) -> Option<WorkspaceInformation> {
+    pub fn find_by_name(&self, workspace_id: &String) -> Option<WorkspaceInformation> {
         self.cached_entries
             .iter()
-            .find(|entry| entry.name == workspace_id)
+            .find(|entry| entry.name == *workspace_id)
             .map(|e| e.clone())
     }
 

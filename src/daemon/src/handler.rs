@@ -97,7 +97,7 @@ pub(crate) fn handle_request(req_id: Uuid, stream: UnixStream, state: Arc<Mutex<
     };
 
     if let Err(err) = command_handler_result {
-        if let Some(msg) = err.log { warn!("{}", msg)}
+        if let Some(msg) = err.log { warn!("[{req_id}] {}", msg)}
         let _ = client.write_json(&Response::error(err.client));
     }
 
@@ -128,7 +128,53 @@ fn handle_workspace_info_cmd(
     state: Arc<Mutex<DaemonState>>
 ) -> Result<(), HandlerError> {
     debug!("[{req_id}] Handling 'workspace_info' command...");
-    todo!()
+
+    let data: WorkspaceInfoRequest = client.read_json().map_err(|e| {
+        HandlerError::both(
+            format!("Unable to read data required to processes the 'workspace_info' command: {e}"),
+            "Unable to read data required to process the 'workspace_info' command".to_string()
+        )
+    })?;
+
+    let guard = state.lock().unwrap();
+    let result = guard.ws_config.find_by_name(&data.name);
+    drop(guard);
+
+    match result {
+        Some(ws_info) => {
+            debug!("[{req_id}] Found workspace with the name '{}'", data.name);
+
+            let response = Response::map_to_success(&ws_info).map_err(|e| {
+                HandlerError::both(
+                    format!("Unable to map '{ws_info:?}' to a response object: {e}"),
+                    "Unable to serialize response data"
+                )
+            })?;
+
+            client.write_json(&response).map_err(|e| {
+                HandlerError::both(
+                    format!("Unable to send 'not found' response to client: {e}"),
+                    "An error occurred when writing the server response"
+                )
+            })?;
+        },
+        None => {
+            debug!("[{req_id}] No workspace with the name '{}' found.", data.name);
+
+            let response = Response::not_found(Some(
+                format!("No local workspace with the name '{}' found.", data.name))
+            );
+
+            client.write_json(&response).map_err(|e| {
+                HandlerError::both(
+                    format!("Unable to send 'not found' response to client: {e}"),
+                    "An error occurred when writing the server response"
+                )
+            })?;
+        }
+    }
+
+    Ok(())
 }
 
 fn handle_list_workspaces_cmd(
