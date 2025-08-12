@@ -137,42 +137,34 @@ fn handle_workspace_info_cmd(
     })?;
 
     let guard = state.lock().unwrap();
-    let result = guard.ws_config.find_by_name(&data.name);
+    let search_result = guard.ws_config.find_by_name(&data.name);
     drop(guard);
 
-    match result {
+    let response = match search_result {
         Some(ws_info) => {
-            debug!("[{req_id}] Found workspace with the name '{}'", data.name);
+            debug!("[{req_id}] Found a workspace with the name '{}'", data.name);
 
-            let response = Response::map_to_success(&ws_info).map_err(|e| {
+            Response::map_to_success(&ws_info).map_err(|e| {
                 HandlerError::both(
                     format!("Unable to map '{ws_info:?}' to a response object: {e}"),
                     "Unable to serialize response data"
                 )
-            })?;
-
-            client.write_json(&response).map_err(|e| {
-                HandlerError::both(
-                    format!("Unable to send 'not found' response to client: {e}"),
-                    "An error occurred when writing the server response"
-                )
-            })?;
+            })?
         },
         None => {
             debug!("[{req_id}] No workspace with the name '{}' found.", data.name);
-
-            let response = Response::not_found(Some(
+            Response::not_found(Some(
                 format!("No local workspace with the name '{}' found.", data.name))
-            );
-
-            client.write_json(&response).map_err(|e| {
-                HandlerError::both(
-                    format!("Unable to send 'not found' response to client: {e}"),
-                    "An error occurred when writing the server response"
-                )
-            })?;
+            )
         }
-    }
+    };
+
+    client.write_json(&response).map_err(|e| {
+        HandlerError::both(
+            format!("Unable to send response '{response:?}' to client: {e}"),
+            "An error occurred while writing the server response"
+        )
+    })?;
 
     Ok(())
 }
