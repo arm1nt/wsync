@@ -183,7 +183,28 @@ fn handle_list_workspaces_cmd(
     state: Arc<Mutex<DaemonState>>
 ) -> Result<(), HandlerError> {
     debug!("[{req_id}] Handling 'list_workspaces' command...");
-    todo!()
+
+    let guard = state.lock().unwrap();
+    let ws_entries = guard.ws_config.all();
+    drop(guard);
+
+    debug!("Found #{} workspaces: {:?}", ws_entries.len(), ws_entries);
+
+    let response = Response::map_to_success(&ws_entries).map_err(|e| {
+        HandlerError::both(
+            format!("Unable to map '{ws_entries:?}' to a response object: {e}"),
+            "Unable to serialize response data"
+        )
+    })?;
+
+    client.write_json(&response).map_err(|e| {
+        HandlerError::both(
+            format!("Unable to send 'not found' response to client: {e}"),
+            "An error occurred when writing the server response"
+        )
+    })?;
+
+    Ok(())
 }
 
 fn handle_list_workspace_info_cmd(
