@@ -1,13 +1,17 @@
-use std::fmt::{Debug, Display};
+use std::fmt::{write, Debug, Display, Formatter};
 
 #[derive(Debug)]
-pub(crate) struct WsConfigError {
-    pub msg: String
+pub(crate) enum WsConfigError {
+    Io(String),
+    Message(String)
 }
 
-impl WsConfigError {
-    pub fn new(msg: String) -> Self {
-        WsConfigError { msg }
+impl Display for WsConfigError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WsConfigError::Io(e) => write!(f, "I/O Error: {e}"),
+            WsConfigError::Message(e) => write!(f, "{e}")
+        }
     }
 }
 
@@ -57,6 +61,7 @@ impl From<std::io::Error> for ClientError {
         Self::Io(e)
     }
 }
+
 impl From<serde_json::Error> for ClientError {
     fn from(e: serde_json::Error) -> Self {
         Self::Serde(e)
