@@ -286,11 +286,63 @@ fn handle_add_workspace_cmd(
 
 fn handle_remove_workspace_cmd(
     req_id: Uuid,
-    client: &mut Client,
+    mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
 ) -> Result<(), HandlerError> {
     debug!("[{req_id}] Handling 'remove_workspace' command...");
-    todo!()
+
+    let data: RemoveWorkspaceRequest = client.read_json().map_err(|e| {
+        HandlerError::both(
+            format!("Unable to read data required to processes the 'remove_workspace' command: {e}"),
+            "Unable to read data required to process the 'remove_workspace' command"
+        )
+    })?;
+
+    let mut guard = state.lock().unwrap();
+
+    let config_res = guard.ws_config.remove_workspace(data.name.clone());
+    match config_res {
+        Ok(()) => {
+            debug!("[{req_id}] Successfully removed workspace '{}' from workspace config file.", &data.name);
+        },
+        Err(err) => {
+            debug!("[{req_id}] Removing workspace '{}' from workspace config file failed.", &data.name);
+
+            return match err {
+                WsConfigError::Io(e) => {
+                    Err(HandlerError::both(
+                        format!("{e}"),
+                        "Couldn't remove the workspace as an error occurred while trying to modify the workspace configuration file"
+                    ))
+                },
+                WsConfigError::Message(e) => {
+                    debug!("[{req_id}] {e}");
+                    generic_write_json(&mut client, &Response::error(Some(e)))?;
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    let monitor_manager_res = guard.monitor_manager.terminate_monitor(&data.name);
+    match monitor_manager_res {
+        Ok(()) => {
+            debug!("[{req_id}] Successfully terminated monitor process for workspace '{}'.", &data.name);
+        },
+        Err(err) => {
+            debug!("[{req_id}] Failed to terminate monitor process for workspace '{}'.", &data.name);
+            return Err(HandlerError::both(
+                format!("{err}"),
+                "Couldn't remove the workspace as an error occurred while trying to terminate its monitor process"
+            ));
+        }
+    }
+
+    drop(guard);
+
+    generic_write_json(&mut client, &Response::success(Some("Successfully removed workspace".to_string())))?;
+
+    Ok(())
 }
 
 fn handle_attach_remote_workspace_cmd(
@@ -309,4 +361,15 @@ fn handle_detach_remote_workspace_cmd(
 ) -> Result<(), HandlerError> {
     debug!("[{req_id}] Handling 'detach_remote_workspace' command...");
     todo!()
+}
+
+fn generic_write_json(client: &mut Client, response: &Response) -> Result<(), HandlerError> {
+    client.write_json(response).map_err(|e| {
+        HandlerError::both(
+            format!("Unable to send response '{response:?}' to client: {e}"),
+            "An error occurred while writing the server response"
+        )
+    })?;
+
+    Ok(())
 }
