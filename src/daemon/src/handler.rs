@@ -11,7 +11,7 @@ use serde::de::DeserializeOwned;
 use serde::{Serialize};
 use serde_json::Deserializer;
 use uuid::Uuid;
-use daemon_interface::request::{AddWorkspaceRequest, AttachRemoteWorkspaceRequest, Command, CommandRequest, RemoveWorkspaceRequest, WorkspaceInfoRequest};
+use daemon_interface::request::{AddWorkspaceRequest, AttachRemoteWorkspaceRequest, Command, CommandRequest, DetachRemoteWorkspaceRequest, RemoveWorkspaceRequest, WorkspaceInfoRequest};
 use daemon_interface::request::Command::ListWorkspaces;
 use daemon_interface::response::ErrorPayload::Message;
 use daemon_interface::response::{DefaultResponse, ErrorPayload, Response, ResponsePayload};
@@ -419,11 +419,95 @@ fn handle_attach_remote_workspace_cmd(
 
 fn handle_detach_remote_workspace_cmd(
     req_id: Uuid,
-    client: &mut Client,
+    mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
 ) -> Result<(), HandlerError> {
     debug!("[{req_id}] Handling 'detach_remote_workspace' command...");
-    todo!()
+
+    let data: DetachRemoteWorkspaceRequest = client.read_json().map_err(|e| {
+        HandlerError::both(
+            format!("Unable to read data required to processes the 'detach_remote_workspace' command: {e}"),
+            "Unable to read data required to process the 'detach_remote_workspace' command"
+        )
+    })?;
+
+    let mut guard = state.lock().unwrap();
+
+    let config_result = guard.ws_config.detach_remote_workspace(
+        data.local_workspace_name.clone(),
+        data.remote_workspace_name.clone()
+    );
+
+    match config_result {
+        Ok(()) => {
+            debug!(
+                "[{req_id}] Successfully detached remote workspace '{}' from '{}' in the workspaces config file",
+                data.remote_workspace_name,
+                data.local_workspace_name
+            );
+        },
+        Err(err) => {
+            debug!(
+                "[{req_id}] Failed to detach remote workspace '{}' from '{}' in the workspaces config file",
+                data.remote_workspace_name,
+                data.local_workspace_name
+            );
+
+            return match err {
+                WsConfigError::Io(e) => {
+                    Err(HandlerError::both(
+                        format!("{e}"),
+                        format!(
+                            "Failed to detach remote workspace '{}' from '{}' because there was an error \
+                            while trying to modify the workspaces configuration file",
+                            data.remote_workspace_name,
+                            data.local_workspace_name
+                        )
+                    ))
+                },
+                WsConfigError::Message(e) => {
+                    debug!("[{req_id}] {e}");
+                    let response: DefaultResponse = Response::error(Some(Message(e)));
+                    generic_write_json(&mut client, &response)?;
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    let updated_workspace: WorkspaceInformation = guard.ws_config
+        .find_by_name(&data.local_workspace_name)
+        .unwrap();
+
+    let mm_res = guard.monitor_manager.restart_monitor(&updated_workspace);
+
+    drop(guard);
+
+    match mm_res {
+        Ok(()) => {
+            debug!("[{req_id}] Successfully (re)started the monitor process for workspace '{}'", data.local_workspace_name);
+        },
+        Err(e) => {
+            debug!("[{req_id}] Failed to (re)start the monitor process for workspace '{}'", data.local_workspace_name);
+
+            return Err(HandlerError::both(
+                format!("{e}"),
+                format!(
+                    "(Re)starting the monitor process for workspace '{}' failed, so changes might \
+                    still be synced to the  remote workspace '{}'.",
+                    data.local_workspace_name,
+                    data.remote_workspace_name
+                )
+            ));
+        }
+    }
+
+    let response: DefaultResponse = Response::success(Some(
+        ResponsePayload::AttachRemoteWorkspace("Successfully detached remote workspace!".to_string())
+    ));
+    generic_write_json(&mut client, &response)?;
+
+    Ok(())
 }
 
 fn generic_write_json<T: Serialize + Display, E: Serialize + Display>(
