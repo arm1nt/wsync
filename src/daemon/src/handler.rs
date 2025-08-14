@@ -14,7 +14,7 @@ use uuid::Uuid;
 use daemon_interface::{AddWorkspaceRequest, AttachRemoteWorkspaceRequest, Command, RemoveWorkspaceRequest, Response, WorkspaceInfoRequest};
 use crate::types::daemon_state::DaemonState;
 use crate::types::{ConnectionInfo, RemoteWorkspace, WorkspaceInformation};
-use crate::types::errors::{ClientError, HandlerError};
+use crate::types::errors::{ClientError, HandlerError, WsConfigError};
 use crate::workspace_config::WorkspaceConfiguration;
 
 struct Client {
@@ -184,7 +184,7 @@ fn handle_list_workspaces_cmd(
         .collect();
     drop(guard);
 
-    debug!("Found #{} workspaces: {:?}", ws_entries.len(), ws_entries);
+    debug!("[{req_id}] Found #{} workspaces: {:?}", ws_entries.len(), ws_entries);
 
     let response = Response::map_to_success(&ws_entries).map_err(|e| {
         HandlerError::both(
@@ -214,7 +214,7 @@ fn handle_list_workspace_info_cmd(
     let ws_entries = guard.ws_config.all();
     drop(guard);
 
-    debug!("Found #{} workspaces: {:?}", ws_entries.len(), ws_entries);
+    debug!("[{req_id}] Found #{} workspaces: {:?}", ws_entries.len(), ws_entries);
 
     let response = Response::map_to_success(&ws_entries).map_err(|e| {
         HandlerError::both(
@@ -239,7 +239,49 @@ fn handle_add_workspace_cmd(
     state: Arc<Mutex<DaemonState>>
 ) -> Result<(), HandlerError> {
     debug!("[{req_id}] Handling 'add_workspace' command...");
-    todo!()
+
+    let data: AddWorkspaceRequest = client.read_json().map_err(|e| {
+        HandlerError::both(
+            format!("Unable to read data required to processes the 'add_workspace' command: {e}"),
+            "Unable to read data required to process the 'add_workspace' command"
+        )
+    })?;
+
+    let mut guard = state.lock().unwrap();
+    let res = guard.ws_config.add_workspace(WorkspaceInformation::from(&data));
+    drop(guard);
+
+    let response = match res {
+        Ok(()) => {
+            debug!("[{req_id}] Successfully added workspace {data:?}");
+            Response::success(Some("Successfully added workspace!".to_string()))
+        },
+        Err(err) => {
+            debug!("[{req_id}] Adding workspace {data:?} was not successful");
+
+            match err {
+                WsConfigError::Io(e) => {
+                    return Err(HandlerError::both(
+                        format!("{e}"),
+                        "Couldn't add the workspace as an error occurred while trying to modify the workspace configuration file"
+                    ));
+                },
+                WsConfigError::Message(e) => {
+                    debug!("[{req_id}] {e}");
+                    Response::error(Some(e))
+                }
+            }
+        }
+    };
+
+    client.write_json(&response).map_err(|e| {
+        HandlerError::both(
+            format!("Unable to send response '{response:?}' to client: {e}"),
+            "An error occurred while writing the server response"
+        )
+    })?;
+
+    Ok(())
 }
 
 fn handle_remove_workspace_cmd(
