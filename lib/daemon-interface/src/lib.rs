@@ -30,7 +30,7 @@ pub struct RemoteWorkspace {
     pub connection_info: ConnectionInfo
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ConnectionInfo {
     Ssh {
         host: String,

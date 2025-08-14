@@ -43,7 +43,7 @@ pub struct RemoveWorkspaceRequest {
     pub name: String
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AttachRemoteWorkspaceRequest {
     pub local_workspace_name: String,
     pub remote_workspace_name: String,
