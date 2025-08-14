@@ -14,6 +14,7 @@ use daemon_state::DaemonState;
 use crate::domain::socket::UnlinkingListener;
 use crate::util::constants::SERVER_SOCKET_PATH_EN_VAR;
 use crate::util::error_exit;
+use crate::util::log::setup_logging;
 
 mod workspace_config;
 mod util;
@@ -25,29 +26,9 @@ mod daemon_state;
 
 const MAX_CONSECUTIVE_CONNECTION_FAILURES: i32 = 10;
 
-fn setup_logging() {
-    // Todo: Configure in a separate config file instead
-    let stdout = ConsoleAppender::builder()
-        .target(Target::Stdout)
-        .encoder(Box::new(PatternEncoder::new("{h({d(%Y-%m-%d %H:%M:%S)} - [{l}]: {m}{n})}")))
-        .build();
-
-    let appender = Appender::builder().build("stdout", Box::new(stdout));
-
-    let config = Config::builder()
-        .appender(appender)
-        .build(Root::builder().appender("stdout").build(LevelFilter::Debug))
-        .unwrap_or_else(|e| {
-            eprintln!("An error occurred while initializing the logging infrastructure: {e:?}");
-            process::exit(1);
-        });
-
-    log4rs::init_config(config).unwrap_or_else(|e| {
-        eprintln!("An error occurred while initializing the logging infrastructure: {e:?}");
-        process::exit(1);
-    });
-
-    info!("Initialized logging framework");
+fn sigint_handler(shutdown: Arc<AtomicBool>) {
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = UnixStream::connect(PathBuf::from(env::var(SERVER_SOCKET_PATH_EN_VAR).unwrap()));
 }
 
 fn get_server_socket() -> UnlinkingListener {
@@ -101,11 +82,6 @@ fn server_loop(state: Arc<Mutex<DaemonState>>, shutdown: Arc<AtomicBool>) {
     }
 
     info!("Terminated wsync daemon server loop");
-}
-
-fn sigint_handler(shutdown: Arc<AtomicBool>) {
-    shutdown.store(true, Ordering::Relaxed);
-    let _ = UnixStream::connect(PathBuf::from(env::var(SERVER_SOCKET_PATH_EN_VAR).unwrap()));
 }
 
 fn main() {

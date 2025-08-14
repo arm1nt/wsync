@@ -1,7 +1,8 @@
 pub(crate) mod constants;
+pub(crate) mod log;
 
 use std::process;
-use log::error;
+use ::log::error;
 
 pub(crate) fn error_exit<T: AsRef<str>>(msg: Option<T>) -> ! {
     if msg.is_some() {

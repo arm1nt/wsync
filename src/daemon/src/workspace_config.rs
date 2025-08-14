@@ -138,14 +138,19 @@ impl WorkspaceConfiguration {
     fn write_file(&self) -> Result<(), WsConfigError> {
         // Todo: Before writing out changes, write to a temp file
 
-        let file = File::options().truncate(true).write(true).open(&self.path).map_err(|e| {
-            WsConfigError::Io(format!("Unable to update workspaces config file: {e:?}"))
-        })?;
+        let file = File::options()
+            .truncate(true)
+            .write(true)
+            .open(&self.path)
+            .map_err(|e| {
+                WsConfigError::Io(format!("Unable to update workspaces config file: {e:?}"))
+            })?;
 
         let mut writer = BufWriter::new(file);
         serde_json::to_writer_pretty(&mut writer, &self.cached_entries).map_err(|e| {
             WsConfigError::Io(format!("Unable to update ws config file: {e}"))
         })?;
+
         writer.flush().map_err(|e|
             WsConfigError::Io(format!("Unable to write ws config changes to file: {e}"))
         )?;
