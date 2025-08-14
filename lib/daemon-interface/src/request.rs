@@ -24,7 +24,6 @@ pub enum Command {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CommandRequest {
-    //#[serde(flatten)]
     pub command: String
 }
 
@@ -33,7 +32,7 @@ pub struct WorkspaceInfoRequest {
     pub name: String
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AddWorkspaceRequest {
     pub name: String,
     pub path: PathBuf

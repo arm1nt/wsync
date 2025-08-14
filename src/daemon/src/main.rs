@@ -10,16 +10,18 @@ use log4rs::encode::pattern::PatternEncoder;
 use log::{error, info, warn, LevelFilter};
 use uuid::Uuid;
 use crate::handler::handle_request;
-use crate::types::daemon_state::DaemonState;
-use crate::types::socket::UnlinkingListener;
+use daemon_state::DaemonState;
+use crate::domain::socket::UnlinkingListener;
 use crate::util::constants::SERVER_SOCKET_PATH_EN_VAR;
 use crate::util::error_exit;
 
 mod workspace_config;
 mod util;
-mod types;
+mod domain;
 mod monitor_manager;
 mod handler;
+mod mappers;
+mod daemon_state;
 
 const MAX_CONSECUTIVE_CONNECTION_FAILURES: i32 = 10;
 

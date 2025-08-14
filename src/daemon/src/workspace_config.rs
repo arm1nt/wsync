@@ -2,8 +2,8 @@ use std::env;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
-use crate::types::{RemoteWorkspace, WorkspaceInformation};
-use crate::types::errors::WsConfigError;
+use crate::domain::models::{RemoteWorkspace, WorkspaceInformation};
+use crate::domain::errors::WsConfigError;
 use crate::util::constants::WS_CONFIG_ENV_VAR;
 
 /// Not thread-safe and no guarantees as to when changes are persisted

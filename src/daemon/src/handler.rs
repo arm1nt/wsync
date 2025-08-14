@@ -1,4 +1,4 @@
-use std::fmt::{format, Debug};
+use std::fmt::{format, Debug, Display};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
@@ -6,15 +6,20 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use serde::de::DeserializeOwned;
 use serde::{Serialize};
 use serde_json::Deserializer;
 use uuid::Uuid;
-use daemon_interface::{AddWorkspaceRequest, AttachRemoteWorkspaceRequest, Command, RemoveWorkspaceRequest, Response, WorkspaceInfoRequest};
-use crate::types::daemon_state::DaemonState;
-use crate::types::{ConnectionInfo, RemoteWorkspace, WorkspaceInformation};
-use crate::types::errors::{ClientError, HandlerError, WsConfigError};
+use daemon_interface::request::{AddWorkspaceRequest, Command, CommandRequest, RemoveWorkspaceRequest, WorkspaceInfoRequest};
+use daemon_interface::request::Command::ListWorkspaces;
+use daemon_interface::response::ErrorPayload::Message;
+use daemon_interface::response::{DefaultResponse, ErrorPayload, Response, ResponsePayload};
+use daemon_interface::WorkspaceInfo;
+use crate::daemon_state::DaemonState;
+use crate::domain::models::{ConnectionInfo, RemoteWorkspace, WorkspaceInformation};
+use crate::domain::errors::{ClientError, HandlerError, WsConfigError};
+use crate::mappers::domain_to_interface::{to_list_workspace_info_response, to_list_workspaces_response, to_workspace_info_response};
 use crate::workspace_config::WorkspaceConfiguration;
 
 struct Client {
@@ -52,7 +57,7 @@ impl Client {
     }
 
     fn write_json<T: Serialize>(&mut self, data: &T) -> Result<(), ClientError> {
-        serde_json::to_writer(&mut self.writer, data)?;
+        serde_json::to_writer_pretty(&mut self.writer, data)?;
         self.writer.flush()?;
         Ok(())
     }
@@ -78,8 +83,11 @@ pub(crate) fn handle_request(req_id: Uuid, stream: UnixStream, state: Arc<Mutex<
     let mut command = match get_command(&mut client) {
         Ok(command) => command,
         Err(e) => {
-            if let Some(msg) = e.log { warn!("{}", msg)}
-            let _= client.write_json(&Response::error(e.client));
+            if let Some(err) = e.log { warn!("[{req_id}] {}", err)}
+            if let Some(err) = e.client {
+                let response: DefaultResponse = Response::error(Some(Message(err)));
+                let _ = client.write_json(&response);
+            }
             info!("[{req_id}] END - Done handling request (elapsed time: {:?})", Instant::now() - start);
             client.shutdown();
             return;
@@ -98,7 +106,10 @@ pub(crate) fn handle_request(req_id: Uuid, stream: UnixStream, state: Arc<Mutex<
 
     if let Err(err) = command_handler_result {
         if let Some(msg) = err.log { warn!("[{req_id}] {}", msg)}
-        let _ = client.write_json(&Response::error(err.client));
+        if let Some(err) = err.client {
+            let response: DefaultResponse = Response::error(Some(Message(err)));
+            let _ = client.write_json(&response);
+        }
     }
 
     info!("[{req_id}] END - Done handling request (elapsed time: {:?})", Instant::now() - start);
@@ -106,25 +117,25 @@ pub(crate) fn handle_request(req_id: Uuid, stream: UnixStream, state: Arc<Mutex<
 }
 
 fn get_command(client: &mut Client) -> Result<Command, HandlerError> {
-    let rcvd_raw_command = client.read_line().map_err(|e| {
+    let raw_client_command: CommandRequest = client.read_json().map_err(|e| {
         HandlerError::both(
-            format!("Failed to read command data: {e}"),
-            "Failed to read command data"
+            format!("Failed to read user command: {e}"),
+            "Failed to read command"
         )
     })?;
 
-    match Command::from_str(rcvd_raw_command.trim()) {
+    match Command::from_str(raw_client_command.command.as_str()) {
         Ok(command) => Ok(command),
         Err(e) => Err(HandlerError::both(
-            format!("Received invalid command '{}': {e}", rcvd_raw_command.trim()),
-            format!("Received invalid command '{}'", rcvd_raw_command.trim())
+            format!("Received invalid command '{}': {e}", raw_client_command.command.as_str()),
+            format!("Received invalid command '{}'", raw_client_command.command.as_str())
         ))
     }
 }
 
 fn handle_workspace_info_cmd(
     req_id: Uuid,
-    client: &mut Client,
+    mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
 ) -> Result<(), HandlerError> {
     debug!("[{req_id}] Handling 'workspace_info' command...");
@@ -144,68 +155,46 @@ fn handle_workspace_info_cmd(
         Some(ws_info) => {
             debug!("[{req_id}] Found a workspace with the name '{}'", data.name);
 
-            Response::map_to_success(&ws_info).map_err(|e| {
-                HandlerError::both(
-                    format!("Unable to map '{ws_info:?}' to a response object: {e}"),
-                    "Unable to serialize response data"
-                )
-            })?
+            let response_data = to_workspace_info_response(ws_info);
+            Response::success(Some(ResponsePayload::WorkspaceInfo(response_data)))
         },
         None => {
             debug!("[{req_id}] No workspace with the name '{}' found.", data.name);
-            Response::not_found(Some(
+
+            Response::not_found(Some(Message(
                 format!("No local workspace with the name '{}' found.", data.name))
-            )
+            ))
         }
     };
 
-    client.write_json(&response).map_err(|e| {
-        HandlerError::both(
-            format!("Unable to send response '{response:?}' to client: {e}"),
-            "An error occurred while writing the server response"
-        )
-    })?;
+    generic_write_json(&mut client, &response)?;
 
     Ok(())
 }
 
 fn handle_list_workspaces_cmd(
     req_id: Uuid,
-    client: &mut Client,
+    mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
 ) -> Result<(), HandlerError> {
     debug!("[{req_id}] Handling 'list_workspaces' command...");
 
     let guard = state.lock().unwrap();
-    let mut ws_entries: Vec<(String, PathBuf)> = guard.ws_config
-        .all()
-        .into_iter()
-        .map(|entry| (entry.name, entry.local_path))
-        .collect();
+    let ws_entries: Vec<WorkspaceInformation> = guard.ws_config.all();
     drop(guard);
 
     debug!("[{req_id}] Found #{} workspaces: {:?}", ws_entries.len(), ws_entries);
 
-    let response = Response::map_to_success(&ws_entries).map_err(|e| {
-        HandlerError::both(
-            format!("Unable to map '{ws_entries:?}' to a response object: {e}"),
-            "Unable to serialize response data"
-        )
-    })?;
-
-    client.write_json(&response).map_err(|e| {
-        HandlerError::both(
-            format!("Unable to send response '{response:?}' to client: {e}"),
-            "An error occurred while writing the server response"
-        )
-    })?;
+    let response_data = to_list_workspaces_response(ws_entries);
+    let response: DefaultResponse = Response::success(Some(ResponsePayload::ListWorkspaces(response_data)));
+    generic_write_json(&mut client, &response)?;
 
     Ok(())
 }
 
 fn handle_list_workspace_info_cmd(
     req_id: Uuid,
-    client: &mut Client,
+    mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
 ) -> Result<(), HandlerError> {
     debug!("[{req_id}] Handling 'list_workspace_info' command...");
@@ -216,26 +205,16 @@ fn handle_list_workspace_info_cmd(
 
     debug!("[{req_id}] Found #{} workspaces: {:?}", ws_entries.len(), ws_entries);
 
-    let response = Response::map_to_success(&ws_entries).map_err(|e| {
-        HandlerError::both(
-            format!("Unable to map '{ws_entries:?}' to a response object: {e}"),
-            "Unable to serialize response data"
-        )
-    })?;
-
-    client.write_json(&response).map_err(|e| {
-        HandlerError::both(
-            format!("Unable to send response '{response:?}' to client: {e}"),
-            "An error occurred while writing the server response"
-        )
-    })?;
+    let response_data = to_list_workspace_info_response(ws_entries);
+    let response: DefaultResponse = Response::success(Some(ResponsePayload::ListWorkspaceInfo(response_data)));
+    generic_write_json(&mut client, &response)?;
 
     Ok(())
 }
 
 fn handle_add_workspace_cmd(
     req_id: Uuid,
-    client: &mut Client,
+    mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
 ) -> Result<(), HandlerError> {
     debug!("[{req_id}] Handling 'add_workspace' command...");
@@ -248,13 +227,15 @@ fn handle_add_workspace_cmd(
     })?;
 
     let mut guard = state.lock().unwrap();
-    let res = guard.ws_config.add_workspace(WorkspaceInformation::from(&data));
+    let res = guard.ws_config.add_workspace(WorkspaceInformation::from(data.clone()));
     drop(guard);
 
     let response = match res {
         Ok(()) => {
             debug!("[{req_id}] Successfully added workspace {data:?}");
-            Response::success(Some("Successfully added workspace!".to_string()))
+            Response::success(Some(
+                ResponsePayload::AddWorkspace("Successfully added workspace!".to_string()))
+            )
         },
         Err(err) => {
             debug!("[{req_id}] Adding workspace {data:?} was not successful");
@@ -268,18 +249,13 @@ fn handle_add_workspace_cmd(
                 },
                 WsConfigError::Message(e) => {
                     debug!("[{req_id}] {e}");
-                    Response::error(Some(e))
+                    Response::error(Some(Message(e)))
                 }
             }
         }
     };
 
-    client.write_json(&response).map_err(|e| {
-        HandlerError::both(
-            format!("Unable to send response '{response:?}' to client: {e}"),
-            "An error occurred while writing the server response"
-        )
-    })?;
+    generic_write_json(&mut client, &response)?;
 
     Ok(())
 }
@@ -317,7 +293,8 @@ fn handle_remove_workspace_cmd(
                 },
                 WsConfigError::Message(e) => {
                     debug!("[{req_id}] {e}");
-                    generic_write_json(&mut client, &Response::error(Some(e)))?;
+                    let response: DefaultResponse = Response::error(Some(Message(e)));
+                    generic_write_json(&mut client, &response)?;
                     Ok(())
                 }
             }
@@ -340,7 +317,10 @@ fn handle_remove_workspace_cmd(
 
     drop(guard);
 
-    generic_write_json(&mut client, &Response::success(Some("Successfully removed workspace".to_string())))?;
+    let response: DefaultResponse = Response::success(Some(
+        ResponsePayload::RemoveWorkspace("Successfully removed workspace!".to_string()))
+    );
+    generic_write_json(&mut client, &response)?;
 
     Ok(())
 }
@@ -363,10 +343,13 @@ fn handle_detach_remote_workspace_cmd(
     todo!()
 }
 
-fn generic_write_json(client: &mut Client, response: &Response) -> Result<(), HandlerError> {
+fn generic_write_json<T: Serialize + Display, E: Serialize + Display>(
+    client: &mut Client,
+    response: &Response<T, E>
+) -> Result<(), HandlerError> {
     client.write_json(response).map_err(|e| {
         HandlerError::both(
-            format!("Unable to send response '{response:?}' to client: {e}"),
+            format!("Unable to send response '{response}' to client: {e}"),
             "An error occurred while writing the server response"
         )
     })?;

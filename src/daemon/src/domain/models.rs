@@ -1,22 +1,14 @@
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
-use daemon_interface::AddWorkspaceRequest;
 
-pub(crate) mod errors;
-pub(crate) mod daemon_state;
-pub(crate) mod socket;
+/// Internal models representing workspaces and their associated information. Those types will, and
+/// already do, deviate from the structs defined in the daemon interface.
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub(crate) struct WorkspaceInformation {
     pub name: String,
     pub local_path: PathBuf,
     pub remote_workspaces: Vec<RemoteWorkspace>,
-}
-
-impl From<&AddWorkspaceRequest> for WorkspaceInformation {
-    fn from(value: &AddWorkspaceRequest) -> Self {
-        Self { name: value.name.clone(), local_path: value.path.clone(), remote_workspaces: vec![]}
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -30,8 +22,8 @@ pub(crate) struct RemoteWorkspace {
 pub(crate) enum ConnectionInfo {
     Ssh {
         host: String,
-        port: u32,
-        username: String,
+        port: Option<u16>,
+        username: Option<String>,
         identity_file: Option<PathBuf>
     },
     HostAlias {
@@ -39,7 +31,7 @@ pub(crate) enum ConnectionInfo {
     },
     RsyncDaemon {
         host: String,
-        port: u32,
-        username: String
+        port: Option<u16>,
+        username: Option<String>
     }
 }
