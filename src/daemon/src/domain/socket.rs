@@ -12,7 +12,7 @@ pub(crate) struct UnlinkingListener {
 impl UnlinkingListener {
 
     pub fn bind() -> Result<Self, SocketError> {
-        let path_env_var = env::var(SERVER_SOCKET_PATH_EN_VAR).map_err(|e| {
+        let path_env_var = env::var(SERVER_SOCKET_PATH_EN_VAR).map_err(|_| {
             SocketError::new(format!("{SERVER_SOCKET_PATH_EN_VAR} env var is not set"))
         })?;
 

@@ -15,7 +15,7 @@ pub(crate) struct WorkspaceConfiguration {
 impl WorkspaceConfiguration {
 
     pub fn init() -> Result<Self, WsConfigError> {
-        let ws_config_file_path = env::var(WS_CONFIG_ENV_VAR).map_err(|e| {
+        let ws_config_file_path = env::var(WS_CONFIG_ENV_VAR).map_err(|_| {
             WsConfigError::Message(format!("{WS_CONFIG_ENV_VAR} is not set!"))
         })?;
 

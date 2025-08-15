@@ -1,26 +1,22 @@
-use std::fmt::{format, Debug, Display};
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::fmt::Display;
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 use serde::de::DeserializeOwned;
 use serde::{Serialize};
 use serde_json::Deserializer;
 use uuid::Uuid;
 use daemon_interface::request::{AddWorkspaceRequest, AttachRemoteWorkspaceRequest, Command, CommandRequest, DetachRemoteWorkspaceRequest, RemoveWorkspaceRequest, WorkspaceInfoRequest};
-use daemon_interface::request::Command::ListWorkspaces;
 use daemon_interface::response::ErrorPayload::Message;
-use daemon_interface::response::{DefaultResponse, ErrorPayload, Response, ResponsePayload};
-use daemon_interface::WorkspaceInfo;
+use daemon_interface::response::{DefaultResponse, Response, ResponsePayload};
 use crate::daemon_state::DaemonState;
-use crate::domain::models::{ConnectionInfo, RemoteWorkspace, WorkspaceInformation};
+use crate::domain::models::{RemoteWorkspace, WorkspaceInformation};
 use crate::domain::errors::{ClientError, HandlerError, WsConfigError};
 use crate::mappers::domain_to_interface::{to_list_workspace_info_response, to_list_workspaces_response, to_workspace_info_response};
-use crate::workspace_config::WorkspaceConfiguration;
 
 struct Client {
     reader: BufReader<UnixStream>,
@@ -80,7 +76,7 @@ pub(crate) fn handle_request(req_id: Uuid, stream: UnixStream, state: Arc<Mutex<
         }
     };
 
-    let mut command = match get_command(&mut client) {
+    let command = match get_command(&mut client) {
         Ok(command) => command,
         Err(e) => {
             if let Some(err) = e.log { warn!("[{req_id}] {}", err)}

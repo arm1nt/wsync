@@ -1,5 +1,5 @@
 use std::sync::{Arc, Mutex};
-use std::{env, process, thread};
+use std::{env, thread};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -65,13 +65,9 @@ fn server_loop(state: Arc<Mutex<DaemonState>>, shutdown: Arc<AtomicBool>) {
 
                 if consecutive_connection_failures > MAX_CONSECUTIVE_CONNECTION_FAILURES {
                     drop(listener); // Manually drop so that the socket file gets removed
-                    error_exit(
-                        Some(
-                            format!(
-                                "Daemon failed {MAX_CONSECUTIVE_CONNECTION_FAILURES} consecutive times to establish a connection with a client"
-                            )
-                        )
-                    );
+                    error_exit(Some(format!(
+                        "Daemon failed {MAX_CONSECUTIVE_CONNECTION_FAILURES} consecutive times to establish a connection with a client"
+                    )));
                 }
             }
         }
