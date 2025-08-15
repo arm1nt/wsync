@@ -9,7 +9,8 @@ use crate::domain::models::WorkspaceInformation;
 use crate::util::constants::MONITOR_EXECUTABLE_ENV_VAR;
 
 pub(crate) struct MonitorManager {
-    map: HashMap<String, Child>,
+    // Only to be directly accessed by the watchdog
+    pub(crate) map: HashMap<String, Child>,
     monitor_executable: String
 }
 

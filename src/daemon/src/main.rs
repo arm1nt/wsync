@@ -11,6 +11,7 @@ use crate::handlers::handlers::handle_request;
 use crate::util::constants::SERVER_SOCKET_PATH_EN_VAR;
 use crate::util::error_exit;
 use crate::util::log::setup_logging;
+use crate::watchdog::watchdog;
 
 mod workspace_config;
 mod util;
@@ -18,6 +19,7 @@ mod domain;
 mod monitor_manager;
 mod daemon_state;
 mod handlers;
+mod watchdog;
 
 const MAX_CONSECUTIVE_CONNECTION_FAILURES: i32 = 10;
 
@@ -88,6 +90,9 @@ fn main() {
     ctrlc::set_handler(move || { sigint_handler(Arc::clone(&shutdown_cloned)) }).unwrap_or_else(|e| {
         error_exit(Some(format!("Unable to set SIGINT error handler: {e:?}")))
     });
+
+    let watchdog_state_clone = Arc::clone(&state);
+    thread::spawn(move || watchdog(watchdog_state_clone) );
 
     server_loop(state, Arc::clone(&shutdown));
 }
