@@ -2,7 +2,7 @@ pub mod request;
 pub mod response;
 pub mod impls;
 
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
