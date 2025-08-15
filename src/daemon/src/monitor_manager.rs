@@ -14,9 +14,6 @@ pub(crate) struct MonitorManager {
     monitor_executable: String
 }
 
-// Todo: Implement a watchdog that checks if a monitor crashed, and if so, performs
-//  cleanup tasks, etc.
-
 impl MonitorManager {
 
     pub fn init() -> Result<Self, MonitorManagerError> {
