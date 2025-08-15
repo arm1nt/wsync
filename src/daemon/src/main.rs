@@ -5,9 +5,9 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use log::{error, info, warn};
 use uuid::Uuid;
-use crate::handler::handle_request;
 use daemon_state::DaemonState;
 use crate::domain::socket::UnlinkingListener;
+use crate::handlers::handlers::handle_request;
 use crate::util::constants::SERVER_SOCKET_PATH_EN_VAR;
 use crate::util::error_exit;
 use crate::util::log::setup_logging;
@@ -16,9 +16,8 @@ mod workspace_config;
 mod util;
 mod domain;
 mod monitor_manager;
-mod handler;
-mod mappers;
 mod daemon_state;
+mod handlers;
 
 const MAX_CONSECUTIVE_CONNECTION_FAILURES: i32 = 10;
 

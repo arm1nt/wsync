@@ -1,67 +1,32 @@
 use std::fmt::Display;
-use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use log::{debug, info, warn};
-use serde::de::DeserializeOwned;
-use serde::{Serialize};
-use serde_json::Deserializer;
+use serde::Serialize;
 use uuid::Uuid;
-use daemon_interface::request::{AddWorkspaceRequest, AttachRemoteWorkspaceRequest, Command, CommandRequest, DetachRemoteWorkspaceRequest, RemoveWorkspaceRequest, WorkspaceInfoRequest};
-use daemon_interface::response::ErrorPayload::Message;
+use daemon_interface::request::{
+    AddWorkspaceRequest,
+    AttachRemoteWorkspaceRequest,
+    Command,
+    CommandRequest,
+    DetachRemoteWorkspaceRequest,
+    RemoveWorkspaceRequest,
+    WorkspaceInfoRequest
+};
 use daemon_interface::response::{DefaultResponse, Response, ResponsePayload};
+use daemon_interface::response::ErrorPayload::Message;
 use crate::daemon_state::DaemonState;
+use crate::domain::errors::WsConfigError;
 use crate::domain::models::{RemoteWorkspace, WorkspaceInformation};
-use crate::domain::errors::{ClientError, HandlerError, WsConfigError};
-use crate::mappers::domain_to_interface::{to_list_workspace_info_response, to_list_workspaces_response, to_workspace_info_response};
-
-struct Client {
-    reader: BufReader<UnixStream>,
-    writer: BufWriter<UnixStream>
-}
-
-impl Client {
-    fn new(stream: UnixStream) -> Result<Self, ClientError> {
-        let r = stream.try_clone()?;
-        let w = stream;
-        Ok( Self { reader: BufReader::new(r), writer: BufWriter::new(w)} )
-    }
-
-    fn read_line(&mut self) -> Result<String, ClientError> {
-        let mut buf = String::new();
-        let bytes_read = self.reader.read_line(&mut buf)?;
-
-        if bytes_read == 0 {
-            return Err(ClientError::Protocol("Connection closed before reading request data"));
-        }
-
-        Ok(buf)
-    }
-
-    fn read_json<T: DeserializeOwned>(&mut self) -> Result<T, ClientError> {
-        let mut stream = Deserializer::from_reader(&mut self.reader).into_iter::<T>();
-        let data = stream.next();
-
-        if data.is_none() {
-            return Err(ClientError::Protocol("Missing command data"));
-        }
-
-        Ok(data.unwrap()?)
-    }
-
-    fn write_json<T: Serialize>(&mut self, data: &T) -> Result<(), ClientError> {
-        serde_json::to_writer_pretty(&mut self.writer, data)?;
-        self.writer.flush()?;
-        Ok(())
-    }
-
-    fn shutdown(&mut self) {
-        let _ = self.writer.get_ref().shutdown(Shutdown::Both);
-    }
-}
+use crate::handlers::client::Client;
+use crate::handlers::errors::HandlerError;
+use crate::handlers::mappers::domain_to_interface::{
+    to_list_workspace_info_response,
+    to_list_workspaces_response,
+    to_workspace_info_response
+};
 
 pub(crate) fn handle_request(req_id: Uuid, stream: UnixStream, state: Arc<Mutex<DaemonState>>) {
     let start = Instant::now();
