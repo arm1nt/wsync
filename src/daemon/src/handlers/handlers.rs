@@ -6,7 +6,7 @@ use std::time::Instant;
 use log::{debug, info, warn};
 use serde::Serialize;
 use uuid::Uuid;
-use client::client::Client;
+use daemon_client::client::Client;
 use daemon_interface::request::{
     AddWorkspaceRequest,
     AttachRemoteWorkspaceRequest,
