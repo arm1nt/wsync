@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
-use strum_macros::{AsRefStr, EnumString};
+use strum_macros::{AsRefStr, Display, EnumString};
 use crate::ConnectionInfo;
 
 /// Exhaustive enumeration of all commands understood and accepted by the wsync daemon.
-#[derive(Serialize, Deserialize, Debug, EnumString, AsRefStr)]
+#[derive(Serialize, Deserialize, Debug, EnumString, AsRefStr, Display)]
 pub enum Command {
     #[strum(serialize="workspace_info")]
     WorkspaceInfo,
