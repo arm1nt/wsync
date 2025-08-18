@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Display, Formatter};
 use serde::Serialize;
+use serde_json::Value;
 use crate::cli::{
     WorkspaceInfoArgs,
     AddWorkspaceArgs,
@@ -26,8 +27,8 @@ pub type Result<T> = std::result::Result<T, ClientRequestError>;
 
 #[derive(Debug)]
 pub struct ClientRequest {
-    pub command_request: String,
-    pub command_data: Option<String>
+    pub command_request: Value,
+    pub command_data: Option<Value>
 }
 
 #[derive(Debug)]
@@ -82,7 +83,7 @@ impl ClientRequest {
         Ok(Self { command_request, command_data: Some(command_data) })
     }
 
-    fn workspace_info_args_to_json(args: WorkspaceInfoArgs) -> Result<String> {
+    fn workspace_info_args_to_json(args: WorkspaceInfoArgs) -> Result<Value> {
         let data = WorkspaceInfoRequest {
             name: args.name
         };
@@ -109,7 +110,7 @@ impl ClientRequest {
         Ok(Self { command_request, command_data: Some(command_data) })
     }
 
-    fn add_workspace_args_to_json(args: AddWorkspaceArgs) -> Result<String> {
+    fn add_workspace_args_to_json(args: AddWorkspaceArgs) -> Result<Value> {
         let data = AddWorkspaceRequest {
             name: args.name,
             path: args.path,
@@ -125,7 +126,7 @@ impl ClientRequest {
         Ok(Self { command_request, command_data: Some(command_data) })
     }
 
-    fn remove_workspace_args_to_json(args: RemoveWorkspaceArgs) -> Result<String> {
+    fn remove_workspace_args_to_json(args: RemoveWorkspaceArgs) -> Result<Value> {
         let data = RemoveWorkspaceRequest {
             name: args.name,
         };
@@ -140,7 +141,7 @@ impl ClientRequest {
         Ok(Self { command_request, command_data: Some(command_data) })
     }
 
-    fn ssh_attach_remote_workspace_args_to_json(args: SshArgs) -> Result<String> {
+    fn ssh_attach_remote_workspace_args_to_json(args: SshArgs) -> Result<Value> {
         let connection_info = if args.host_alias.is_some() {
             ConnectionInfo::HostAlias { host_alias: args.host_alias.unwrap() }
         } else {
@@ -169,7 +170,7 @@ impl ClientRequest {
         Ok(Self { command_request, command_data: Some(command_data) })
     }
 
-    fn rsync_attach_remote_workspace_args_to_json(args: RsyncArgs) -> Result<String> {
+    fn rsync_attach_remote_workspace_args_to_json(args: RsyncArgs) -> Result<Value> {
         let connection_info = ConnectionInfo::RsyncDaemon {
             host: Self::unwrap_host_info(args.host_info),
             port: Some(args.port),
@@ -201,7 +202,7 @@ impl ClientRequest {
         Ok(Self { command_request, command_data: Some(command_data) })
     }
 
-    fn detach_remote_workspace_args_to_json(args: DetachRemoteWorkspaceArgs) -> Result<String> {
+    fn detach_remote_workspace_args_to_json(args: DetachRemoteWorkspaceArgs) -> Result<Value> {
         let data = DetachRemoteWorkspaceRequest {
             local_workspace_name: args.workspace_name,
             remote_workspace_name: args.remote_workspace_name,
@@ -210,27 +211,27 @@ impl ClientRequest {
         Ok(Self::get_command_data(data)?)
     }
 
-    fn get_command_request(command: request::Command) -> Result<String> {
+    fn get_command_request(command: request::Command) -> Result<Value> {
         let command_request = CommandRequest {
             command: command.to_string()
         };
 
-        Self::get_json(command_request).map_err(|e| {
+        Self::get_json_value(command_request).map_err(|e| {
             ClientRequestError {
                 msg: format!("Failed to create command request for command '{}': {e}", command)
             }
         })
     }
 
-    fn get_command_data<T: Serialize>(data: T) -> Result<String> {
-        Self::get_json(data).map_err(|e| {
+    fn get_command_data<T: Serialize>(data: T) -> Result<Value> {
+        Self::get_json_value(data).map_err(|e| {
             ClientRequestError {
                 msg: format!("Failed to serialize request data: {e}")
             }
         })
     }
 
-    fn get_json<T: Serialize>(data: T) -> std::result::Result<String, serde_json::Error> {
-        Ok(serde_json::to_string(&data)?)
+    fn get_json_value<T: Serialize>(data: T) -> std::result::Result<Value, serde_json::Error> {
+        Ok(serde_json::to_value(&data)?)
     }
 }
