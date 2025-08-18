@@ -81,6 +81,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "client"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -100,6 +108,7 @@ dependencies = [
 name = "daemon"
 version = "0.1.0"
 dependencies = [
+ "client",
  "ctrlc",
  "daemon-interface",
  "log",

@@ -4,9 +4,9 @@ use std::os::unix::net::UnixStream;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Deserializer;
-use crate::handlers::errors::ClientError;
+use crate::errors::ClientError;
 
-pub(super) struct Client {
+pub struct Client {
     reader: BufReader<UnixStream>,
     writer: BufWriter<UnixStream>
 }

@@ -6,6 +6,7 @@ use std::time::Instant;
 use log::{debug, info, warn};
 use serde::Serialize;
 use uuid::Uuid;
+use client::client::Client;
 use daemon_interface::request::{
     AddWorkspaceRequest,
     AttachRemoteWorkspaceRequest,
@@ -20,7 +21,6 @@ use daemon_interface::response::ErrorPayload::Message;
 use crate::daemon_state::DaemonState;
 use crate::domain::errors::WsConfigError;
 use crate::domain::models::{RemoteWorkspace, WorkspaceInformation};
-use crate::handlers::client::Client;
 use crate::handlers::errors::HandlerError;
 use crate::handlers::mappers::domain_to_interface::{
     to_list_workspace_info_response,
