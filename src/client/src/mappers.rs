@@ -1,0 +1,236 @@
+use std::fmt::{Debug, Display, Formatter};
+use serde::Serialize;
+use crate::cli::{
+    WorkspaceInfoArgs,
+    AddWorkspaceArgs,
+    RemoveWorkspaceArgs,
+    AttachRemoteWorkspaceSubcommands,
+    SshArgs,
+    RsyncArgs,
+    DetachRemoteWorkspaceArgs,
+    Cli,
+    Command,
+    HostInfo,
+};
+use daemon_interface::{request, ConnectionInfo};
+use daemon_interface::request::{
+    AddWorkspaceRequest,
+    AttachRemoteWorkspaceRequest,
+    CommandRequest,
+    DetachRemoteWorkspaceRequest,
+    RemoveWorkspaceRequest,
+    WorkspaceInfoRequest,
+};
+
+pub type Result<T> = std::result::Result<T, ClientRequestError>;
+
+#[derive(Debug)]
+pub struct ClientRequest {
+    pub command_request: String,
+    pub command_data: Option<String>
+}
+
+#[derive(Debug)]
+pub struct ClientRequestError {
+    msg: String
+}
+
+impl Display for ClientRequestError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.msg)
+    }
+}
+
+impl ClientRequest {
+    pub fn get_client_request(cli: Cli) -> Result<Self> {
+        match cli.command {
+            Command::WorkspaceInfo(args) => {
+                Ok(Self::get_workspace_info_request(args)?)
+            }
+            Command::ListWorkspaces(_) => {
+                Ok(Self::get_list_workspaces_request()?)
+            }
+            Command::ListWorkspaceInfo(_) => {
+                Ok(Self::get_list_workspace_info_request()?)
+            }
+            Command::AddWorkspace(args) => {
+                Ok(Self::get_add_workspace_request(args)?)
+            }
+            Command::RemoveWorkspace(args) => {
+                Ok(Self::get_remove_workspace_request(args)?)
+            }
+            Command::AttachRemoteWorkspace(sub_command) => {
+                match sub_command.command {
+                    AttachRemoteWorkspaceSubcommands::Ssh(args) => {
+                        Ok(Self::get_ssh_attach_remote_workspace_request(args)?)
+                    }
+                    AttachRemoteWorkspaceSubcommands::Rsync(args) => {
+                        Ok(Self::get_rsync_attach_remote_workspace_request(args)?)
+                    }
+                }
+            }
+            Command::DetachRemoteWorkspace(args) => {
+                Ok(Self::get_detach_remote_workspace_request(args)?)
+            }
+        }
+    }
+
+    fn get_workspace_info_request(args: WorkspaceInfoArgs) -> Result<Self> {
+        let command_request = Self::get_command_request(request::Command::WorkspaceInfo)?;
+        let command_data = Self::workspace_info_args_to_json(args)?;
+
+        Ok(Self { command_request, command_data: Some(command_data) })
+    }
+
+    fn workspace_info_args_to_json(args: WorkspaceInfoArgs) -> Result<String> {
+        let data = WorkspaceInfoRequest {
+            name: args.name
+        };
+
+        Ok(Self::get_command_data(data)?)
+    }
+
+    fn get_list_workspaces_request() -> Result<Self> {
+        let command_request = Self::get_command_request(request::Command::ListWorkspaces)?;
+
+        Ok(Self { command_request, command_data: None })
+    }
+
+    fn get_list_workspace_info_request() -> Result<Self> {
+        let command_request = Self::get_command_request(request::Command::ListWorkspaceInfo)?;
+
+        Ok(Self { command_request, command_data: None })
+    }
+
+    fn get_add_workspace_request(args: AddWorkspaceArgs) -> Result<Self> {
+        let command_request = Self::get_command_request(request::Command::AddWorkspace)?;
+        let command_data = Self::add_workspace_args_to_json(args)?;
+
+        Ok(Self { command_request, command_data: Some(command_data) })
+    }
+
+    fn add_workspace_args_to_json(args: AddWorkspaceArgs) -> Result<String> {
+        let data = AddWorkspaceRequest {
+            name: args.name,
+            path: args.path,
+        };
+
+        Ok(Self::get_command_data(data)?)
+    }
+
+    fn get_remove_workspace_request(args: RemoveWorkspaceArgs) -> Result<Self> {
+        let command_request = Self::get_command_request(request::Command::RemoveWorkspace)?;
+        let command_data = Self::remove_workspace_args_to_json(args)?;
+
+        Ok(Self { command_request, command_data: Some(command_data) })
+    }
+
+    fn remove_workspace_args_to_json(args: RemoveWorkspaceArgs) -> Result<String> {
+        let data = RemoveWorkspaceRequest {
+            name: args.name,
+        };
+
+        Ok(Self::get_command_data(data)?)
+    }
+
+    fn get_ssh_attach_remote_workspace_request(args: SshArgs) -> Result<Self> {
+        let command_request = Self::get_command_request(request::Command::AttachRemoteWorkspace)?;
+        let command_data = Self::ssh_attach_remote_workspace_args_to_json(args)?;
+
+        Ok(Self { command_request, command_data: Some(command_data) })
+    }
+
+    fn ssh_attach_remote_workspace_args_to_json(args: SshArgs) -> Result<String> {
+        let connection_info = if args.host_alias.is_some() {
+            ConnectionInfo::HostAlias { host_alias: args.host_alias.unwrap() }
+        } else {
+            ConnectionInfo::Ssh {
+                host: Self::unwrap_host_info(args.host_info),
+                port: Some(args.port),
+                username: args.user,
+                identity_file: args.identity_file,
+            }
+        };
+
+        let data = AttachRemoteWorkspaceRequest {
+            local_workspace_name: args.args.workspace_name,
+            remote_workspace_name: args.args.remote_workspace_name,
+            remote_workspace_path: args.args.remote_path,
+            connection_info,
+        };
+
+        Ok(Self::get_command_data(data)?)
+    }
+
+    fn get_rsync_attach_remote_workspace_request(args: RsyncArgs) -> Result<Self> {
+        let command_request = Self::get_command_request(request::Command::AttachRemoteWorkspace)?;
+        let command_data = Self::rsync_attach_remote_workspace_args_to_json(args)?;
+
+        Ok(Self { command_request, command_data: Some(command_data) })
+    }
+
+    fn rsync_attach_remote_workspace_args_to_json(args: RsyncArgs) -> Result<String> {
+        let connection_info = ConnectionInfo::RsyncDaemon {
+            host: Self::unwrap_host_info(args.host_info),
+            port: Some(args.port),
+            username: args.user,
+        };
+
+        let data = AttachRemoteWorkspaceRequest {
+            local_workspace_name: args.args.workspace_name,
+            remote_workspace_name: args.args.remote_workspace_name,
+            remote_workspace_path: args.args.remote_path,
+            connection_info,
+        };
+
+        Ok(Self::get_command_data(data)?)
+    }
+
+    fn unwrap_host_info(host_info: HostInfo) -> String {
+        if host_info.hostname.is_some() {
+            host_info.hostname.unwrap()
+        } else {
+            host_info.ip_addr.unwrap().to_string()
+        }
+    }
+
+    fn get_detach_remote_workspace_request(args: DetachRemoteWorkspaceArgs) -> Result<Self> {
+        let command_request = Self::get_command_request(request::Command::DetachRemoteWorkspace)?;
+        let command_data = Self::detach_remote_workspace_args_to_json(args)?;
+
+        Ok(Self { command_request, command_data: Some(command_data) })
+    }
+
+    fn detach_remote_workspace_args_to_json(args: DetachRemoteWorkspaceArgs) -> Result<String> {
+        let data = DetachRemoteWorkspaceRequest {
+            local_workspace_name: args.workspace_name,
+            remote_workspace_name: args.remote_workspace_name,
+        };
+
+        Ok(Self::get_command_data(data)?)
+    }
+
+    fn get_command_request(command: request::Command) -> Result<String> {
+        let command_request = CommandRequest {
+            command: command.to_string()
+        };
+
+        Self::get_json(command_request).map_err(|e| {
+            ClientRequestError {
+                msg: format!("Failed to create command request for command '{}': {e}", command)
+            }
+        })
+    }
+
+    fn get_command_data<T: Serialize>(data: T) -> Result<String> {
+        Self::get_json(data).map_err(|e| {
+            ClientRequestError {
+                msg: format!("Failed to serialize request data: {e}")
+            }
+        })
+    }
+
+    fn get_json<T: Serialize>(data: T) -> std::result::Result<String, serde_json::Error> {
+        Ok(serde_json::to_string(&data)?)
+    }
+}
