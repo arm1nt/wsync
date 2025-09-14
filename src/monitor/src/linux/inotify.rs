@@ -211,8 +211,6 @@ fn handle_inotify_event(event: Event<&OsStr>, inotify: &mut Inotify, state: &mut
         _ => {}
     }
 
-    // IN_UNMOUNT   --> maybe terminate? ignore?
-
     let metadata = state.get_metadata(&event.wd).unwrap().clone();
     debug!("{metadata}");
 
@@ -259,7 +257,7 @@ fn handle_inotify_event(event: Event<&OsStr>, inotify: &mut Inotify, state: &mut
     }
 
     if event.mask.contains(EventMask::ISDIR)
-        && (event.mask.contains(EventMask::DELETE) || event.mask.contains(EventMask::MOVED_FROM)) {
+        && (event.mask.intersects(EventMask::DELETE | EventMask::MOVED_FROM | EventMask::UNMOUNT)) {
 
         let dir_wd = state
             .get_wd(&resource_path)
