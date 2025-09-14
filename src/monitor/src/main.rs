@@ -60,5 +60,9 @@ fn main() {
     // Todo: To account for possible ws chances that happened while the monitor was inactive, sync
     //       the entire ws with all remote workspaces
 
-    todo!()
+    if cfg!(target_os = "linux") {
+        linux::run_fs_listener(workspace);
+    } else {
+        panic!("OS not supported (yet)");
+    }
 }
