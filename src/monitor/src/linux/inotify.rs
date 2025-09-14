@@ -171,6 +171,21 @@ pub(super) fn init_inotify_instance(ws_info: &WorkspaceInfo, state: &mut Monitor
     Ok(inotify)
 }
 
+fn handle_queue_overflow(inotify: &mut Inotify, state: &mut MonitorState) -> Result<()> {
+    debug!("Inotify instance's event queue overflowed!");
+
+    state.reset_state();
+    add_watches_recursively(inotify, state, state.workspace_info.local_path.clone(), None).map_err(|e| {
+        Error::new("Failed to rebuild state after inotify event queue overflow: {e}")
+    })?;
+
+    synchronize_workspace(state.workspace_info, None).map_err(|e|
+        Error::new(format!("{e}"))
+    )?;
+
+    Ok(())
+}
+
 fn handle_inotify_event(event: Event<&OsStr>, inotify: &mut Inotify, state: &mut MonitorState) -> Result<()> {
     debug!("{:?}", event);
 
@@ -178,17 +193,7 @@ fn handle_inotify_event(event: Event<&OsStr>, inotify: &mut Inotify, state: &mut
         // Since we don't know what events, and therewith what workspace changes, we missed due to
         // the overflow, we sync the ws with all remote workspaces starting from the ws root and
         // also rebuild the internal state.
-        debug!("Inotify instance's event queue overflowed!");
-
-        state.reset_state();
-        add_watches_recursively(inotify, state, state.workspace_info.local_path.clone(), None).map_err(|e| {
-            Error::new("Failed to rebuild state after inotify event queue overflow: {e}")
-        })?;
-
-        synchronize_workspace(state.workspace_info, None).map_err(|e|
-            Error::new(format!("{e}"))
-        )?;
-        return Ok(())
+        return handle_queue_overflow(inotify, state);
     }
 
     match state.contains_wd(&event.wd) {
