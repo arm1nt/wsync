@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fmt::{write, Display, Formatter};
+use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use inotify::WatchDescriptor;
 use crate::models::WorkspaceInfo;
