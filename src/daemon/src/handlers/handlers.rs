@@ -19,7 +19,6 @@ use daemon_interface::request::{
 use daemon_interface::response::{DefaultResponse, Response, ResponsePayload};
 use daemon_interface::response::ErrorPayload::Message;
 use crate::daemon_state::DaemonState;
-use crate::domain::errors::WsConfigError;
 use crate::domain::models::{RemoteWorkspace, WorkspaceInformation};
 use crate::handlers::errors::HandlerError;
 use crate::handlers::mappers::domain_to_interface::{
@@ -27,6 +26,7 @@ use crate::handlers::mappers::domain_to_interface::{
     to_list_workspaces_response,
     to_workspace_info_response
 };
+use crate::workspace_config;
 
 pub(crate) fn handle_request(req_id: Uuid, stream: UnixStream, state: Arc<Mutex<DaemonState>>) {
     let start = Instant::now();
@@ -202,13 +202,13 @@ fn handle_add_workspace_cmd(
             debug!("[{req_id}] Adding workspace {data:?} was not successful");
 
             match err {
-                WsConfigError::Io(e) => {
+                workspace_config::Error::Io(e) => {
                     return Err(HandlerError::both(
                         format!("{e}"),
                         "Couldn't add the workspace as an error occurred while trying to modify the workspace configuration file"
                     ));
                 },
-                WsConfigError::Message(e) => {
+                workspace_config::Error::Message(e) => {
                     debug!("[{req_id}] {e}");
                     Response::error(Some(Message(e)))
                 }
@@ -246,13 +246,13 @@ fn handle_remove_workspace_cmd(
             debug!("[{req_id}] Removing workspace '{}' from workspace config file failed.", &data.name);
 
             return match err {
-                WsConfigError::Io(e) => {
+                workspace_config::Error::Io(e) => {
                     Err(HandlerError::both(
                         format!("{e}"),
                         "Couldn't remove the workspace as an error occurred while trying to modify the workspace configuration file"
                     ))
                 },
-                WsConfigError::Message(e) => {
+                workspace_config::Error::Message(e) => {
                     debug!("[{req_id}] {e}");
                     let response: DefaultResponse = Response::error(Some(Message(e)));
                     generic_write_json(&mut client, &response)?;
@@ -323,7 +323,7 @@ fn handle_attach_remote_workspace_cmd(
             );
 
             return match err {
-                WsConfigError::Io(e) => {
+                workspace_config::Error::Io(e) => {
                     Err(HandlerError::both(
                         format!("{e}"),
                         format!(
@@ -334,7 +334,7 @@ fn handle_attach_remote_workspace_cmd(
                         )
                     ))
                 },
-                WsConfigError::Message(e) => {
+                workspace_config::Error::Message(e) => {
                     debug!("[{req_id}] {e}");
                     let response: DefaultResponse = Response::error(Some(Message(e)));
                     generic_write_json(&mut client, &response)?;
@@ -415,7 +415,7 @@ fn handle_detach_remote_workspace_cmd(
             );
 
             return match err {
-                WsConfigError::Io(e) => {
+                workspace_config::Error::Io(e) => {
                     Err(HandlerError::both(
                         format!("{e}"),
                         format!(
@@ -426,7 +426,7 @@ fn handle_detach_remote_workspace_cmd(
                         )
                     ))
                 },
-                WsConfigError::Message(e) => {
+                workspace_config::Error::Message(e) => {
                     debug!("[{req_id}] {e}");
                     let response: DefaultResponse = Response::error(Some(Message(e)));
                     generic_write_json(&mut client, &response)?;
