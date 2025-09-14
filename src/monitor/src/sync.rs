@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use log::{debug, error, warn};
-use std::fmt::Write;
+use std::fmt::{Display, Formatter, Write};
 use std::process::{Command, ExitStatus, Stdio};
 use crate::models::{ConnectionInfo, RemoteWorkspace, WorkspaceInfo};
 use crate::util::error_exit;
@@ -11,6 +11,16 @@ pub(super) enum Error {
     RemoteSystemError(String),
     LocalError(String)
 }
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::LocalError(msg) => write!(f, "[Local_Error] {msg}"),
+            Error::RemoteSystemError(msg) => write!(f, "[Remote_System_Error] {msg}")
+        }
+    }
+}
+
 type Result<T> = std::result::Result<T, Error>;
 
 fn pathbuf_to_string(path: PathBuf) -> Result<String> {
