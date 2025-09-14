@@ -37,6 +37,10 @@ impl<'a> MonitorState<'a> {
         }
     }
 
+    pub(super) fn reset_state(&mut self) {
+        self.inotify_watch_state.clear_state();
+    }
+
     pub(super) fn contains_wd(&self, wd: &WatchDescriptor) -> Result<bool, Error> {
         self.inotify_watch_state.contains_wd(wd)
     }
@@ -88,6 +92,11 @@ impl InotifyWatchState {
             wd_to_metadata: HashMap::new(),
             path_to_wd: HashMap::new()
         }
+    }
+
+    pub(self) fn clear_state(&mut self) {
+        self.wd_to_metadata.clear();
+        self.path_to_wd.clear();
     }
 
     pub(self) fn contains_wd(&self, wd: &WatchDescriptor) -> Result<bool, Error> {

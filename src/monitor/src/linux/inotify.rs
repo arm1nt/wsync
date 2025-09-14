@@ -174,6 +174,23 @@ pub(super) fn init_inotify_instance(ws_info: &WorkspaceInfo, state: &mut Monitor
 fn handle_inotify_event(event: Event<&OsStr>, inotify: &mut Inotify, state: &mut MonitorState) -> Result<()> {
     debug!("{:?}", event);
 
+    if event.mask.contains(EventMask::Q_OVERFLOW) {
+        // Since we don't know what events, and therewith what workspace changes, we missed due to
+        // the overflow, we sync the ws with all remote workspaces starting from the ws root and
+        // also rebuild the internal state.
+        debug!("Inotify instance's event queue overflowed!");
+
+        state.reset_state();
+        add_watches_recursively(inotify, state, state.workspace_info.local_path.clone(), None).map_err(|e| {
+            Error::new("Failed to rebuild state after inotify event queue overflow: {e}")
+        })?;
+
+        synchronize_workspace(state.workspace_info, None).map_err(|e|
+            Error::new(format!("{e}"))
+        )?;
+        return Ok(())
+    }
+
     match state.contains_wd(&event.wd) {
         Ok(contained) if !contained => {
             // Chances are that this is an old event that is still enqueued, but the associated
@@ -189,7 +206,6 @@ fn handle_inotify_event(event: Event<&OsStr>, inotify: &mut Inotify, state: &mut
         _ => {}
     }
 
-    // IN_OVERFLOW  --> maybe check if our dir-tree is still up-to-date?
     // IN_UNMOUNT   --> maybe terminate? ignore?
 
     let metadata = state.get_metadata(&event.wd).unwrap().clone();
