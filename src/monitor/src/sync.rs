@@ -1,7 +1,7 @@
 use std::path::PathBuf;
-use log::{debug, warn};
+use log::{debug, error, warn};
 use std::fmt::Write;
-use std::process::Command;
+use std::process::{Command, ExitStatus, Stdio};
 use crate::models::{ConnectionInfo, RemoteWorkspace, WorkspaceInfo};
 use crate::util::error_exit;
 use crate::util::fs::concat_paths;
@@ -182,27 +182,27 @@ fn get_rsync_arguments(
 fn execute_rsync_command(args: Vec<String>) -> Result<()> {
     debug!("Attempting to sync with args: '{:?}'", args);
 
-    let mut child = match Command::new("rsync").args(&args).spawn() {
-        Ok(child) => child,
+    let mut rsync_output = match Command::new("rsync").args(&args).output() {
+        Ok(output) => output,
         Err(error) => {
-            return Err(Error::LocalError(
-                format!("Unable to spawn child 'rsync' process with args '{:?}': {error}", args)
-            ));
+            return Err(Error::LocalError(format!("Unable to run 'rsync': {error}")));
         }
     };
 
-    match child.wait() {
-        Ok(status) if !status.success()=> {
-            return Err(Error::RemoteSystemError(
-                format!("'rsync' returned status code '{}'", status)
-            ));
-        },
-        Err(error) => {
-            return Err(Error::LocalError(
-                format!("Failed to wait for child 'rsync' process: {error}")
-            ));
-        },
-        _ => {}
+    if !rsync_output.stdout.is_empty() {
+        let stringified_stdout = String::from_utf8_lossy(&rsync_output.stdout);
+        warn!("{}", stringified_stdout);
+    }
+
+    if !rsync_output.stderr.is_empty() {
+        let stringified_stderr = String::from_utf8_lossy(&rsync_output.stderr);
+        error!("{}", stringified_stderr);
+    }
+
+    if !rsync_output.status.success() {
+        return Err(Error::RemoteSystemError(
+            format!("'rsync' returned status code '{}'", rsync_output.status)
+        ));
     }
 
     Ok(())
