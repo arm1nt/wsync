@@ -6,10 +6,12 @@ use serde_json::{Deserializer, StreamDeserializer};
 use serde_json::de::IoRead;
 use util::log::setup_logging;
 use crate::models::{Error, WorkspaceInfo};
+use crate::sync::synchronize_workspace;
 use crate::util::error_exit;
 
 mod util;
 mod linux;
+mod sync;
 mod models;
 
 fn get_json_deserializer<R: Read, T: DeserializeOwned>(reader: R) -> StreamDeserializer<'static, IoRead<BufReader<R>>, T> {
@@ -57,8 +59,11 @@ fn main() {
         error_exit(Some(format!("{e}")));
     });
 
-    // Todo: To account for possible ws chances that happened while the monitor was inactive, sync
-    //       the entire ws with all remote workspaces
+    // To account for possible workspace changes that happened while the monitor was inactive, sync
+    // the entire ws with all remote workspaces.
+    let _ = synchronize_workspace(&workspace, None).unwrap_or_else(|e| {
+        error_exit(Some(format!("Failed initial sync of workspace with remote systems: {e:?}")))
+    });
 
     if cfg!(target_os = "linux") {
         linux::run_fs_listener(workspace);

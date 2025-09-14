@@ -3,10 +3,11 @@ use std::ffi::OsStr;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use inotify::{Event, EventMask, Inotify, WatchDescriptor, WatchMask};
-use log::{debug, error, trace, warn};
+use log::{debug, error, warn};
 use crate::linux::monitor_state;
 use crate::linux::monitor_state::{MonitorState, WatchMetadata};
 use crate::models::{Error, WorkspaceInfo};
+use crate::sync::synchronize_workspace;
 use crate::util::fs::{concat_paths, get_subdir_names};
 
 type Result<T> = std::result::Result<T, Error>;
@@ -67,7 +68,7 @@ fn remove_watches_recursively(
     // Remove the wd entry from the parent directory's list of child watches
     if watch_metadata.relative_path.is_some() {
         let parent_path = get_parent_pathbuf(&watch_metadata.path)?;
-        let mut parent_md = state
+        let parent_md = state
             .get_metadata_mut_from_path(&parent_path)
             .ok_or(Error::new(format!("No metadata stored for '{:?}'", parent_path)))?;
 
@@ -195,16 +196,8 @@ fn handle_inotify_event(event: Event<&OsStr>, inotify: &mut Inotify, state: &mut
     debug!("{metadata}");
 
     if event.mask.contains(EventMask::IGNORED) {
-        debug!(
-            "Received '{:?}' for a watch that was implicitly removed. Removing associated metadata!",
-            EventMask::IGNORED
-        );
-
-        if let Err(error @ monitor_state::Error::InconsistentState(_)) = state.rm_watch_metadata(&event.wd) {
-            return Err(Error::new(
-                format!("Error while deleting metadata of implicitly removed watch: {error}")
-            ));
-        }
+        debug!("Received '{:?}' for a watch that was implicitly removed.", EventMask::IGNORED);
+        return Ok(());
     }
 
     let affected_dir_path = concat_paths(Some(&metadata.ws_root_path), metadata.relative_path.as_ref())?;
@@ -254,8 +247,10 @@ fn handle_inotify_event(event: Event<&OsStr>, inotify: &mut Inotify, state: &mut
         let _ = remove_watches_recursively(inotify, state, &dir_wd);
     }
 
-    // Todo: do sync
-    warn!("Should sync '{:?}' here", metadata.relative_path.as_ref());
+    synchronize_workspace(state.workspace_info, metadata.relative_path.as_ref()).map_err(|e| {
+        Error::new(format!("{e:?}"))
+    })?;
+
     Ok(())
 }
 
