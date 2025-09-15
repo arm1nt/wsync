@@ -3,7 +3,7 @@ use std::process;
 use std::os::unix::net::UnixStream;
 use clap::Parser;
 use daemon_client::client::Client;
-use daemon_interface::response::{DefaultResponse, ResponseStatus};
+use daemon_interface::response::DefaultResponse;
 use crate::cli::Cli;
 use crate::mappers::ClientRequest;
 
@@ -35,28 +35,14 @@ fn handle_request(request: ClientRequest) -> Result<(), String> {
 
     client.write_json(&request.command_request).map_err(|e| format!("{e}"))?;
 
-    match request.command_data {
-        Some(data) => {
-            client.write_json(&data).map_err(|e| format!("{e}"))?
-        },
-        None => {}
+    if let Some(data) = request.command_data {
+        client.write_json(&data).map_err(|e| format!("{e}"))?;
     }
 
     let response: DefaultResponse = client.read_json().map_err(|e|
         format!("Unable to read daemon response: {e}")
     )?;
-
-    match response.status {
-        ResponseStatus::Success => {
-            println!("{:?}", response.result)
-        },
-        ResponseStatus::NotFound => {
-            println!("{:?}", response.error)
-        },
-        ResponseStatus::Error => {
-            eprintln!("{:?}", response.error)
-        }
-    }
+    println!("{response}");
 
     Ok(())
 }
