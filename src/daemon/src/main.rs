@@ -85,10 +85,10 @@ fn main() {
     state.lock().unwrap().restore();
 
     let shutdown: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
-    let shutdown_cloned = Arc::clone(&shutdown);
 
+    let shutdown_cloned = Arc::clone(&shutdown);
     ctrlc::set_handler(move || { sigint_handler(Arc::clone(&shutdown_cloned)) }).unwrap_or_else(|e| {
-        error_exit(Some(format!("Unable to set SIGINT error handler: {e:?}")))
+        error_exit(Some(format!("Unable to set SIGINT error handler: {e}")))
     });
 
     let watchdog_state_clone = Arc::clone(&state);

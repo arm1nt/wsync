@@ -22,7 +22,7 @@ pub(crate) fn watchdog(state: Arc<Mutex<DaemonState>>) {
     loop {
         sleep(timeout);
 
-        // Reset timeout to default value
+        // Reset timeout to default value in case it was previously modified
         timeout = DEFAULT_WATCHDOG_INTERVAL_SECONDS;
 
         let mut guard = match state.try_lock() {
@@ -46,7 +46,7 @@ pub(crate) fn watchdog(state: Arc<Mutex<DaemonState>>) {
 
         let mut monitors_to_restart: Vec<String> = vec![];
 
-        for (workspace_id, monitor) in guard.monitor_manager.map.iter_mut() {
+        for (workspace_id, monitor) in guard.monitor_manager.ws_id_to_monitor.iter_mut() {
 
             match monitor.try_wait() {
                 Ok(Some(status)) => {
