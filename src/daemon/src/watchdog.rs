@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, TryLockError};
-use std::thread::{current, sleep};
+use std::thread::sleep;
 use std::time::Duration;
 use log::{debug, error, info, warn};
 use crate::daemon_state::DaemonState;
+use crate::util::constants::SERVER_SOCKET_PATH_EN_VAR;
 use crate::util::error_exit;
 
 const DEFAULT_WATCHDOG_INTERVAL_SECONDS: Duration = Duration::from_secs(60);
@@ -38,7 +39,7 @@ pub(crate) fn watchdog(state: Arc<Mutex<DaemonState>>) {
                     },
                     TryLockError::Poisoned(e) => {
                         error!("[WATCHDOG] Daemon state lock is poisoned: {e}");
-                        error_exit::<String>(None);
+                        terminate();
                     }
                 }
             }
@@ -50,7 +51,6 @@ pub(crate) fn watchdog(state: Arc<Mutex<DaemonState>>) {
 
             match monitor.try_wait() {
                 Ok(Some(status)) => {
-                    warn!("[WATCHDOG] Monitor process of '{workspace_id}' exited with status '{status}'");
 
                     let count = watchdog_state.monitor_failure_map
                         .entry(workspace_id.clone())
@@ -58,10 +58,25 @@ pub(crate) fn watchdog(state: Arc<Mutex<DaemonState>>) {
                     *count += 1;
 
                     if *count >= MAX_MONITOR_FAILURES {
-                        error!("[WATCHDOG] Monitor for '{}' crashed {} times (threshold reached)", workspace_id, MAX_MONITOR_FAILURES);
-                        error_exit::<String>(None);
+
+                        if *count == MAX_MONITOR_FAILURES {
+                            error!(
+                                "[WATCHDOG] Monitor for '{}' crashed {} times (threshold reached). \
+                                No more restart attempts will be made!",
+                                workspace_id,
+                                MAX_MONITOR_FAILURES
+                            );
+                        }
+
+                        continue;
                     }
 
+                    warn!(
+                        "[WATCHDOG] Monitor process of '{}' stopped with status '{}'. Attempting \
+                        to restart it...",
+                        workspace_id,
+                        status
+                    );
                     monitors_to_restart.push(workspace_id.clone());
                 },
                 Err(e) => {
@@ -72,10 +87,14 @@ pub(crate) fn watchdog(state: Arc<Mutex<DaemonState>>) {
         }
 
         for ws in monitors_to_restart {
-            let workspace = guard.ws_config.find_by_name(&ws).unwrap_or_else(|| {
-                error!("[WATCHDOG] Cannot restart monitor for '{}' as this workspace does not exist.", ws);
-                error_exit::<String>(None);
-            });
+
+            let workspace = match guard.ws_config.find_by_name(&ws) {
+                Some(ws_info) => ws_info,
+                None => {
+                    error!("[WATCHDOG] Cannot restart monitor for '{}' as this workspace does not exist.", ws);
+                    continue;
+                }
+            };
 
             match guard.monitor_manager.restart_monitor(&workspace) {
                 Ok(()) => {
@@ -83,11 +102,14 @@ pub(crate) fn watchdog(state: Arc<Mutex<DaemonState>>) {
                 },
                 Err(e) => {
                     error!("[WATCHDOG] Failed to restart monitor for '{}': {e}", ws);
-                    error_exit::<String>(None);
                 }
             }
         }
 
         drop(guard);
     }
+}
+
+fn terminate() -> ! {
+    error_exit::<String>(None);
 }
