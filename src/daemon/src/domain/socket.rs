@@ -1,8 +1,12 @@
 use std::env;
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
-use crate::domain::errors::SocketError;
 use crate::util::constants::SERVER_SOCKET_PATH_EN_VAR;
+
+#[derive(Debug)]
+pub(crate) struct Error {
+    pub(crate) msg: String
+}
 
 pub(crate) struct UnlinkingListener {
     path: PathBuf,
@@ -11,18 +15,16 @@ pub(crate) struct UnlinkingListener {
 
 impl UnlinkingListener {
 
-    pub fn bind() -> Result<Self, SocketError> {
+    pub fn bind() -> Result<Self, Error> {
         let path_env_var = env::var(SERVER_SOCKET_PATH_EN_VAR).map_err(|_| {
-            SocketError::new(format!("{SERVER_SOCKET_PATH_EN_VAR} env var is not set"))
+            Error { msg: format!("{SERVER_SOCKET_PATH_EN_VAR} env var is not set") }
         })?;
 
         let path: PathBuf = PathBuf::from(path_env_var);
 
         UnixListener::bind(&path)
             .map(|listener| { UnlinkingListener { path, listener }})
-            .map_err(|e| {
-                SocketError::new(e.to_string())
-            })
+            .map_err(|e| { Error { msg: e.to_string() } })
     }
 
 }
