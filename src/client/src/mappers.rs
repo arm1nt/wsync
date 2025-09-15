@@ -26,9 +26,9 @@ use daemon_interface::request::{
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
-pub struct ClientRequest {
-    pub command_request: Value,
-    pub command_data: Option<Value>
+pub(crate) struct ClientRequest {
+    pub(crate) command_request: Value,
+    pub(crate) command_data: Option<Value>
 }
 
 #[derive(Debug)]
