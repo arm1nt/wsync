@@ -19,7 +19,7 @@ impl<T: Display + Serialize, E: Display + Serialize> Display for Response<T, E> 
 
         let payload = match self.status {
             ResponseStatus::Success => self.result.as_ref().map(|v| format!("{v}")),
-            _ => self.error.as_ref().map(|e| format!("{}", e.clone()))
+            _ => self.error.as_ref().map(|e| format!("{e}"))
         };
 
         if let Some(args) = payload {
