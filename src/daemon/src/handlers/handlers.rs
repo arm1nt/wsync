@@ -20,13 +20,15 @@ use daemon_interface::response::{DefaultResponse, Response, ResponsePayload};
 use daemon_interface::response::ErrorPayload::Message;
 use crate::daemon_state::DaemonState;
 use crate::domain::models::{RemoteWorkspace, WorkspaceInformation};
-use crate::handlers::errors::HandlerError;
+use crate::handlers::errors::Error;
 use crate::handlers::mappers::domain_to_interface::{
     to_list_workspace_info_response,
     to_list_workspaces_response,
     to_workspace_info_response
 };
 use crate::workspace_config;
+
+type Result<T> = std::result::Result<T, Error>;
 
 pub(crate) fn handle_request(req_id: Uuid, stream: UnixStream, state: Arc<Mutex<DaemonState>>) {
     let start = Instant::now();
@@ -77,9 +79,9 @@ pub(crate) fn handle_request(req_id: Uuid, stream: UnixStream, state: Arc<Mutex<
     client.shutdown();
 }
 
-fn get_command(client: &mut Client) -> Result<Command, HandlerError> {
+fn get_command(client: &mut Client) -> Result<Command> {
     let raw_client_command: CommandRequest = client.read_json().map_err(|e| {
-        HandlerError::both(
+        Error::both(
             format!("Failed to read user command: {e}"),
             "Failed to read command"
         )
@@ -87,7 +89,7 @@ fn get_command(client: &mut Client) -> Result<Command, HandlerError> {
 
     match Command::from_str(raw_client_command.command.as_str()) {
         Ok(command) => Ok(command),
-        Err(e) => Err(HandlerError::both(
+        Err(e) => Err(Error::both(
             format!("Received invalid command '{}': {e}", raw_client_command.command.as_str()),
             format!("Received invalid command '{}'", raw_client_command.command.as_str())
         ))
@@ -98,11 +100,11 @@ fn handle_workspace_info_cmd(
     req_id: Uuid,
     mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), HandlerError> {
+) -> Result<()> {
     debug!("[{req_id}] Handling 'workspace_info' command...");
 
     let data: WorkspaceInfoRequest = client.read_json().map_err(|e| {
-        HandlerError::both(
+        Error::both(
             format!("Unable to read data required to processes the 'workspace_info' command: {e}"),
             "Unable to read data required to process the 'workspace_info' command".to_string()
         )
@@ -137,7 +139,7 @@ fn handle_list_workspaces_cmd(
     req_id: Uuid,
     mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), HandlerError> {
+) -> Result<()> {
     debug!("[{req_id}] Handling 'list_workspaces' command...");
 
     let guard = state.lock().unwrap();
@@ -157,7 +159,7 @@ fn handle_list_workspace_info_cmd(
     req_id: Uuid,
     mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), HandlerError> {
+) -> Result<()> {
     debug!("[{req_id}] Handling 'list_workspace_info' command...");
 
     let guard = state.lock().unwrap();
@@ -177,11 +179,11 @@ fn handle_add_workspace_cmd(
     req_id: Uuid,
     mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), HandlerError> {
+) -> Result<()> {
     debug!("[{req_id}] Handling 'add_workspace' command...");
 
     let data: AddWorkspaceRequest = client.read_json().map_err(|e| {
-        HandlerError::both(
+        Error::both(
             format!("Unable to read data required to processes the 'add_workspace' command: {e}"),
             "Unable to read data required to process the 'add_workspace' command"
         )
@@ -203,7 +205,7 @@ fn handle_add_workspace_cmd(
 
             match err {
                 workspace_config::Error::Io(e) => {
-                    return Err(HandlerError::both(
+                    return Err(Error::both(
                         format!("{e}"),
                         "Couldn't add the workspace as an error occurred while trying to modify the workspace configuration file"
                     ));
@@ -225,11 +227,11 @@ fn handle_remove_workspace_cmd(
     req_id: Uuid,
     mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), HandlerError> {
+) -> Result<()> {
     debug!("[{req_id}] Handling 'remove_workspace' command...");
 
     let data: RemoveWorkspaceRequest = client.read_json().map_err(|e| {
-        HandlerError::both(
+        Error::both(
             format!("Unable to read data required to processes the 'remove_workspace' command: {e}"),
             "Unable to read data required to process the 'remove_workspace' command"
         )
@@ -247,7 +249,7 @@ fn handle_remove_workspace_cmd(
 
             return match err {
                 workspace_config::Error::Io(e) => {
-                    Err(HandlerError::both(
+                    Err(Error::both(
                         format!("{e}"),
                         "Couldn't remove the workspace as an error occurred while trying to modify the workspace configuration file"
                     ))
@@ -269,7 +271,7 @@ fn handle_remove_workspace_cmd(
         },
         Err(err) => {
             debug!("[{req_id}] Failed to terminate monitor process for workspace '{}'.", &data.name);
-            return Err(HandlerError::both(
+            return Err(Error::both(
                 format!("{err}"),
                 "Couldn't remove the workspace as an error occurred while trying to terminate its monitor process"
             ));
@@ -290,11 +292,11 @@ fn handle_attach_remote_workspace_cmd(
     req_id: Uuid,
     mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), HandlerError> {
+) -> Result<()> {
     debug!("[{req_id}] Handling 'attach_remote_workspace' command...");
 
     let data: AttachRemoteWorkspaceRequest = client.read_json().map_err(|e| {
-        HandlerError::both(
+        Error::both(
             format!("Unable to read data required to processes the 'attach_remote_workspace' command: {e}"),
             "Unable to read data required to process the 'attach_remote_workspace' command"
         )
@@ -324,7 +326,7 @@ fn handle_attach_remote_workspace_cmd(
 
             return match err {
                 workspace_config::Error::Io(e) => {
-                    Err(HandlerError::both(
+                    Err(Error::both(
                         format!("{e}"),
                         format!(
                             "Failed to attach remote workspace '{}' to '{}' because there was an error \
@@ -359,7 +361,7 @@ fn handle_attach_remote_workspace_cmd(
         Err(e) => {
             debug!("[{req_id}] Failed to (re)start the monitor process for workspace '{}'", data.local_workspace_name);
 
-            return Err(HandlerError::both(
+            return Err(Error::both(
                 format!("{e}"),
                 format!(
                     "(Re)starting the monitor process for workspace '{}' failed, so changes cannot \
@@ -382,11 +384,11 @@ fn handle_detach_remote_workspace_cmd(
     req_id: Uuid,
     mut client: &mut Client,
     state: Arc<Mutex<DaemonState>>
-) -> Result<(), HandlerError> {
+) -> Result<()> {
     debug!("[{req_id}] Handling 'detach_remote_workspace' command...");
 
     let data: DetachRemoteWorkspaceRequest = client.read_json().map_err(|e| {
-        HandlerError::both(
+        Error::both(
             format!("Unable to read data required to processes the 'detach_remote_workspace' command: {e}"),
             "Unable to read data required to process the 'detach_remote_workspace' command"
         )
@@ -416,7 +418,7 @@ fn handle_detach_remote_workspace_cmd(
 
             return match err {
                 workspace_config::Error::Io(e) => {
-                    Err(HandlerError::both(
+                    Err(Error::both(
                         format!("{e}"),
                         format!(
                             "Failed to detach remote workspace '{}' from '{}' because there was an error \
@@ -451,7 +453,7 @@ fn handle_detach_remote_workspace_cmd(
         Err(e) => {
             debug!("[{req_id}] Failed to (re)start the monitor process for workspace '{}'", data.local_workspace_name);
 
-            return Err(HandlerError::both(
+            return Err(Error::both(
                 format!("{e}"),
                 format!(
                     "(Re)starting the monitor process for workspace '{}' failed, so changes might \
@@ -474,9 +476,9 @@ fn handle_detach_remote_workspace_cmd(
 fn generic_write_json<T: Serialize + Display, E: Serialize + Display>(
     client: &mut Client,
     response: &Response<T, E>
-) -> Result<(), HandlerError> {
+) -> Result<()> {
     client.write_json(response).map_err(|e| {
-        HandlerError::both(
+        Error::both(
             format!("Unable to send response '{response}' to client: {e}"),
             "An error occurred while writing the server response"
         )

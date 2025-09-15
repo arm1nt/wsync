@@ -1,3 +1,3 @@
 pub(crate) mod handlers;
-mod errors;
-mod mappers;
+pub(self) mod errors;
+pub(self) mod mappers;
