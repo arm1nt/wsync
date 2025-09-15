@@ -23,7 +23,7 @@ use daemon_interface::request::{
     WorkspaceInfoRequest,
 };
 
-pub type Result<T> = std::result::Result<T, ClientRequestError>;
+type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub struct ClientRequest {
@@ -32,18 +32,19 @@ pub struct ClientRequest {
 }
 
 #[derive(Debug)]
-pub struct ClientRequestError {
-    msg: String
+pub(crate) struct Error {
+    pub(self) msg: String
 }
 
-impl Display for ClientRequestError {
+impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.msg)
     }
 }
 
 impl ClientRequest {
-    pub fn get_client_request(cli: Cli) -> Result<Self> {
+
+    pub(crate) fn get_client_request(cli: Cli) -> Result<Self> {
         match cli.command {
             Command::WorkspaceInfo(args) => {
                 Ok(Self::get_workspace_info_request(args)?)
@@ -217,7 +218,7 @@ impl ClientRequest {
         };
 
         Self::get_json_value(command_request).map_err(|e| {
-            ClientRequestError {
+            Error {
                 msg: format!("Failed to create command request for command '{}': {e}", command)
             }
         })
@@ -225,7 +226,7 @@ impl ClientRequest {
 
     fn get_command_data<T: Serialize>(data: T) -> Result<Value> {
         Self::get_json_value(data).map_err(|e| {
-            ClientRequestError {
+            Error {
                 msg: format!("Failed to serialize request data: {e}")
             }
         })
@@ -234,4 +235,5 @@ impl ClientRequest {
     fn get_json_value<T: Serialize>(data: T) -> std::result::Result<Value, serde_json::Error> {
         Ok(serde_json::to_value(&data)?)
     }
+
 }

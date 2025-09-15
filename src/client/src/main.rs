@@ -1,4 +1,3 @@
-use std::io::{Read, Write};
 use std::process;
 use std::os::unix::net::UnixStream;
 use clap::Parser;

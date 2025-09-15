@@ -11,11 +11,11 @@ use clap::{Args, Parser, Subcommand};
 #[command(propagate_version = true)]
 pub(crate) struct Cli {
     #[command(subcommand)]
-    pub command: Command
+    pub(crate) command: Command
 }
 
 #[derive(Subcommand)]
-pub enum Command {
+pub(crate) enum Command {
     /// Get detailed information about a specific workspace, e.g. name, path, remote workspaces, etc.
     WorkspaceInfo(WorkspaceInfoArgs),
     /// Get overview information about all managed local workspaces
@@ -36,43 +36,43 @@ pub enum Command {
 }
 
 #[derive(Args)]
-pub struct NoArgs {}
+pub(crate) struct NoArgs {}
 
 #[derive(Args)]
-pub struct WorkspaceInfoArgs {
+pub(crate) struct WorkspaceInfoArgs {
     /// Name of the local workspace whose information should be displayed
     #[arg(short, long)]
-    pub name: String
+    pub(crate) name: String
 }
 
 #[derive(Args)]
-pub struct AddWorkspaceArgs {
+pub(crate) struct AddWorkspaceArgs {
     /// Name of the workspace to be added. This name must be unique among all managed local workspaces
     /// and will be used to identify and reference it in other commands (e.g. when attaching a
     /// remote workspace, etc.)
     #[arg(short, long)]
-    pub name: String,
+    pub(crate) name: String,
 
     /// Absolute path to the local workspace
     #[arg(short, long)]
-    pub path: PathBuf
+    pub(crate) path: PathBuf
 }
 
 #[derive(Args)]
-pub struct RemoveWorkspaceArgs {
+pub(crate) struct RemoveWorkspaceArgs {
     /// Name of the local workspace to be removed. The workspace will no longer be managed by wsync
     #[arg(short, long)]
-    pub name: String
+    pub(crate) name: String
 }
 
 #[derive(Args)]
-pub struct AttachRemoteWorkspaceCommand {
+pub(crate) struct AttachRemoteWorkspaceCommand {
     #[command(subcommand)]
-    pub command: AttachRemoteWorkspaceSubcommands
+    pub(crate) command: AttachRemoteWorkspaceSubcommands
 }
 
 #[derive(Subcommand)]
-pub enum AttachRemoteWorkspaceSubcommands {
+pub(crate) enum AttachRemoteWorkspaceSubcommands {
     /// Attach a remote workspace to a local workspace managed by wsync.
     /// wsync will connect to the remote system via SSH
     Ssh(SshArgs),
@@ -82,87 +82,87 @@ pub enum AttachRemoteWorkspaceSubcommands {
 }
 
 #[derive(Args, Debug)]
-pub struct AttachRemoteWorkspaceArgs {
+pub(crate) struct AttachRemoteWorkspaceArgs {
     /// Name of the local workspace to which the remote workspace should be attached.
     #[arg(short, long)]
-    pub workspace_name: String,
+    pub(crate) workspace_name: String,
 
     /// Name of the remote workspace to be attached. The name must be unique among all remote
     /// workspaces attached to the local workspace and will be used to reference it in other
     /// commands (e.g. detaching it, etc.)
     #[arg(short, long)]
-    pub remote_workspace_name: String,
+    pub(crate) remote_workspace_name: String,
 
     /// Absolute path to the remote workspace on the remote system
     #[arg(short = 'p', long)]
-    pub remote_path: PathBuf
+    pub(crate) remote_path: PathBuf
 }
 
 #[derive(Args)]
 #[group(required = false, multiple = false)]
-pub struct HostInfo {
+pub(crate) struct HostInfo {
     /// IP address of the remote system
     #[arg(long)]
-    pub ip_addr: Option<IpAddr>,
+    pub(crate) ip_addr: Option<IpAddr>,
 
     /// Domain name of the remote system
     #[arg(long)]
-    pub  hostname: Option<String>
+    pub(crate) hostname: Option<String>
 }
 
 #[derive(Args)]
-pub struct SshArgs {
+pub(crate) struct SshArgs {
     #[command(flatten)]
-    pub args: AttachRemoteWorkspaceArgs,
+    pub(crate) args: AttachRemoteWorkspaceArgs,
 
     /* Connect by manually specifying SSH related information */
     #[command(flatten)]
-    pub host_info: HostInfo,
+    pub(crate) host_info: HostInfo,
 
     /// Port to be used when establishing an SSH connection
     #[arg(long, default_value_t = 22)]
-    pub port: u16,
+    pub(crate) port: u16,
 
     /// Username to be used when establishing an SSH connection
     #[arg(long)]
-    pub user: Option<String>,
+    pub(crate) user: Option<String>,
 
     /// Path to an SSH identity file holding the key needed to authenticate with the remote system.
     #[arg(long)]
-    pub identity_file: Option<PathBuf>,
+    pub(crate) identity_file: Option<PathBuf>,
 
     /* Simply specify ssh host alias containing all the relevant information */
     /// Alias specified in the SSH config file that defines all the information required to establish
     /// an SSH connection to the remote system.
     #[arg(long, conflicts_with_all = vec!["hostname", "ip_addr", "port", "user", "identity_file"])]
-    pub host_alias: Option<String>
+    pub(crate) host_alias: Option<String>
 }
 
 #[derive(Args)]
-pub struct RsyncArgs {
+pub(crate) struct RsyncArgs {
     #[command(flatten)]
-    pub args: AttachRemoteWorkspaceArgs,
+    pub(crate) args: AttachRemoteWorkspaceArgs,
 
     #[command(flatten)]
-    pub host_info: HostInfo,
+    pub(crate) host_info: HostInfo,
 
     /// Port to be used when establishing a connection
     #[arg(long, default_value_t = 873)]
-    pub port: u16,
+    pub(crate) port: u16,
 
     /// Username to be used when establishing a connection
     #[arg(long)]
-    pub user: Option<String>
+    pub(crate) user: Option<String>
 }
 
 #[derive(Args)]
-pub struct DetachRemoteWorkspaceArgs {
+pub(crate) struct DetachRemoteWorkspaceArgs {
     /// Name of the local workspace from which the remote workspace should be detached.
     #[arg(short, long)]
-    pub workspace_name: String,
+    pub(crate) workspace_name: String,
 
     /// Name of the remote workspace to be detached. Changes will no longer be propagated to this
     /// remote workspace
     #[arg(short, long)]
-    pub remote_workspace_name: String,
+    pub(crate) remote_workspace_name: String,
 }
