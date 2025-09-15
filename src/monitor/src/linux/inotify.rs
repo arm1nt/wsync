@@ -240,7 +240,7 @@ fn handle_inotify_event(event: Event<&OsStr>, inotify: &mut Inotify, state: &mut
             return Ok(());
         }
 
-        // Todo:
+        return Err(Error::new("Workspace was moved or deleted"));
     }
 
     if event.mask.contains(EventMask::CREATE) || event.mask.contains(EventMask::MOVED_TO) {
@@ -294,7 +294,7 @@ pub(super) fn listen_for_events(inotify: &mut Inotify, state: &mut MonitorState)
 
         for event in events {
             if let Err(error) = handle_inotify_event(event, inotify, state) {
-                error!("Error handling inotify event: {}", error.msg);
+                error!("Error handling inotify event: {error}");
                 break 'event_reader;
             }
         }
