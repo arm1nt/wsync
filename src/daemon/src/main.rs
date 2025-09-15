@@ -8,7 +8,7 @@ use uuid::Uuid;
 use daemon_state::DaemonState;
 use crate::domain::socket::UnlinkingListener;
 use crate::handlers::handlers::handle_request;
-use crate::util::constants::SERVER_SOCKET_PATH_EN_VAR;
+use crate::util::constants::SERVER_SOCKET_PATH_ENV_VAR;
 use crate::util::error_exit;
 use crate::util::log::setup_logging;
 use crate::watchdog::watchdog;
@@ -25,7 +25,7 @@ const MAX_CONSECUTIVE_CONNECTION_FAILURES: i32 = 10;
 
 fn sigint_handler(shutdown: Arc<AtomicBool>) {
     shutdown.store(true, Ordering::Relaxed);
-    let _ = UnixStream::connect(PathBuf::from(env::var(SERVER_SOCKET_PATH_EN_VAR).unwrap()));
+    let _ = UnixStream::connect(PathBuf::from(env::var(SERVER_SOCKET_PATH_ENV_VAR).unwrap()));
 }
 
 fn get_server_socket() -> UnlinkingListener {

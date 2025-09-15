@@ -1,7 +1,7 @@
 use std::env;
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
-use crate::util::constants::SERVER_SOCKET_PATH_EN_VAR;
+use crate::util::constants::SERVER_SOCKET_PATH_ENV_VAR;
 
 #[derive(Debug)]
 pub(crate) struct Error {
@@ -16,8 +16,8 @@ pub(crate) struct UnlinkingListener {
 impl UnlinkingListener {
 
     pub fn bind() -> Result<Self, Error> {
-        let path_env_var = env::var(SERVER_SOCKET_PATH_EN_VAR).map_err(|_| {
-            Error { msg: format!("{SERVER_SOCKET_PATH_EN_VAR} env var is not set") }
+        let path_env_var = env::var(SERVER_SOCKET_PATH_ENV_VAR).map_err(|_| {
+            Error { msg: format!("{SERVER_SOCKET_PATH_ENV_VAR} env var is not set") }
         })?;
 
         let path: PathBuf = PathBuf::from(path_env_var);
