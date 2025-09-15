@@ -46,7 +46,7 @@ pub(crate) fn handle_request(req_id: Uuid, stream: UnixStream, state: Arc<Mutex<
     let command = match get_command(&mut client) {
         Ok(command) => command,
         Err(e) => {
-            if let Some(err) = e.log { warn!("[{req_id}] {}", err)}
+            if let Some(err) = e.log { warn!("[{req_id}] {}", err) }
             if let Some(err) = e.client {
                 let response: DefaultResponse = Response::error(Some(Message(err)));
                 let _ = client.write_json(&response);
@@ -68,7 +68,7 @@ pub(crate) fn handle_request(req_id: Uuid, stream: UnixStream, state: Arc<Mutex<
     };
 
     if let Err(err) = command_handler_result {
-        if let Some(msg) = err.log { warn!("[{req_id}] {}", msg)}
+        if let Some(msg) = err.log { warn!("[{req_id}] {}", msg) }
         if let Some(err) = err.client {
             let response: DefaultResponse = Response::error(Some(Message(err)));
             let _ = client.write_json(&response);

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env;
 use std::sync::{Arc, Mutex, TryLockError};
 use std::thread::sleep;
 use std::time::Duration;
@@ -111,5 +112,8 @@ pub(crate) fn watchdog(state: Arc<Mutex<DaemonState>>) {
 }
 
 fn terminate() -> ! {
+    if let Ok(val) = env::var(SERVER_SOCKET_PATH_EN_VAR) {
+        let _ = std::fs::remove_file(val);
+    }
     error_exit::<String>(None);
 }
