@@ -62,7 +62,7 @@ impl Into<daemon_interface::ConnectionInfo> for ConnectionInfo {
     }
 }
 
-pub(crate) fn to_workspace_info_response(data: WorkspaceInformation) -> WorkspaceInfoResponse {
+pub(in crate::handlers) fn to_workspace_info_response(data: WorkspaceInformation) -> WorkspaceInfoResponse {
     let remote_workspaces: Vec<daemon_interface::RemoteWorkspace> = data.remote_workspaces
         .into_iter()
         .map(|rw| {
@@ -84,7 +84,7 @@ pub(crate) fn to_workspace_info_response(data: WorkspaceInformation) -> Workspac
     WorkspaceInfoResponse { info }
 }
 
-pub(crate) fn to_list_workspaces_response(data: Vec<WorkspaceInformation>) -> ListWorkspacesResponse {
+pub(in crate::handlers) fn to_list_workspaces_response(data: Vec<WorkspaceInformation>) -> ListWorkspacesResponse {
     let workspaces_overview: Vec<daemon_interface::WorkspaceOverview> = data
         .into_iter()
         .map(|workspace| {
@@ -102,7 +102,7 @@ pub(crate) fn to_list_workspaces_response(data: Vec<WorkspaceInformation>) -> Li
     }
 }
 
-pub(crate) fn to_list_workspace_info_response(data: Vec<WorkspaceInformation>) -> ListWorkspaceInfoResponse {
+pub(in crate::handlers) fn to_list_workspace_info_response(data: Vec<WorkspaceInformation>) -> ListWorkspaceInfoResponse {
     let workspaces_info: Vec<daemon_interface::WorkspaceInfo> = data
         .into_iter()
         .map(|workspace| workspace.into())
