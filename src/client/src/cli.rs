@@ -1,6 +1,19 @@
 use std::net::IpAddr;
 use std::path::PathBuf;
+use std::process;
 use clap::{Args, Parser, Subcommand};
+
+pub(self) type Result<T> = std::result::Result<T, Error>;
+
+pub(self) struct Error {
+    msg: String
+}
+
+impl Error {
+    pub(self) fn new (msg: String) -> Self {
+        Error { msg }
+    }
+}
 
 #[derive(Parser)]
 #[command(name = "wsync-client")]
@@ -165,4 +178,60 @@ pub(crate) struct DetachRemoteWorkspaceArgs {
     /// remote workspace
     #[arg(short, long)]
     pub(crate) remote_workspace_name: String,
+}
+
+pub(self) fn validate_ssh_connection_args(args: &SshArgs) -> Result<()> {
+
+    if args.host_alias.is_some() {
+        return Ok(());
+    }
+
+    // In case no host alias is specified, the following restriction applies
+    if args.host_info.hostname.is_none() && args.host_info.ip_addr.is_none() {
+        return Err(Error::new(
+            "Either the remote system's domain name or its IP address must be provided!".to_string()
+        ));
+    }
+
+    Ok(())
+}
+
+pub(self) fn validate_rsync_connection_args(args: &RsyncArgs) -> Result<()> {
+
+    if args.host_info.hostname.is_none() && args.host_info.ip_addr.is_none() {
+        return Err(Error::new(
+            "Either the remote system's domain name or its IP address must be provided!".to_string()
+        ));
+    }
+
+    Ok(())
+}
+
+pub(self) fn validate_attach_remote_ws_subcommand(sub_cmd: &AttachRemoteWorkspaceCommand) -> Result<()> {
+    match &sub_cmd.command {
+        AttachRemoteWorkspaceSubcommands::Ssh(args) => {
+            validate_ssh_connection_args(args)?;
+        },
+        AttachRemoteWorkspaceSubcommands::Rsync(args) => {
+            validate_rsync_connection_args(args)?;
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn parse_cli_arguments() -> Cli {
+    let cli: Cli = Cli::parse();
+
+    // Perform additional validation that cannot be expressed with clap
+    match &cli.command {
+        Command::AttachRemoteWorkspace(sub_cmd) => {
+            if let Err(e) = validate_attach_remote_ws_subcommand(sub_cmd) {
+                eprintln!("[INPUT VALIDATION ERROR] {}", e.msg);
+                process::exit(1);
+            }
+        },
+        _ => {}
+    }
+
+    cli
 }

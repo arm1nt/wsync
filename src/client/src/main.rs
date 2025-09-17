@@ -1,10 +1,9 @@
 use std::process;
 use std::os::unix::net::UnixStream;
-use clap::Parser;
 use daemon_client::client::Client;
 use daemon_interface::response::DefaultResponse;
 use wsync_config::{config, init_config, ConfigKey};
-use crate::cli::Cli;
+use crate::cli::{parse_cli_arguments, Cli};
 use crate::mappers::ClientRequest;
 
 mod cli;
@@ -57,7 +56,7 @@ fn main() {
         process::exit(1);
     });
 
-    let cli: Cli = Cli::parse();
+    let cli: Cli = parse_cli_arguments();
     let request = ClientRequest::get_client_request(cli).unwrap_or_else(|e| {
         eprintln!("[ERROR] {e}");
         process::exit(1);
