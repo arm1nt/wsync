@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
+use wsync_config::{config, ConfigKey};
 use crate::domain::models::{RemoteWorkspace, WorkspaceInformation};
 use crate::util::constants::WS_CONFIG_ENV_VAR;
 
@@ -31,16 +32,14 @@ pub(crate) struct WorkspaceConfiguration {
 impl WorkspaceConfiguration {
 
     pub(crate) fn init() -> Result<Self> {
+        let ws_config_file_path = config()
+            .get_path(ConfigKey::WorkspaceConfigFilePath)
+            .ok_or(Error::Message("Config does not specify a path for a workspace config file".to_string()))?;
 
-        let ws_config_file_path = env::var(WS_CONFIG_ENV_VAR).map_err(|_| {
-            Error::Message(format!("{WS_CONFIG_ENV_VAR} is not set!"))
-        })?;
+        validate_config_file_path(&ws_config_file_path)?;
 
-        let path = PathBuf::from(&ws_config_file_path);
-        validate_config_file_path(&path)?;
-
-        let config_entries = Self::read_file(&path)?;
-        Ok( Self { path, cached_entries: config_entries })
+        let config_entries = Self::read_file(&ws_config_file_path)?;
+        Ok( Self { path: ws_config_file_path, cached_entries: config_entries })
     }
 
     pub(crate) fn all(&self) -> Vec<WorkspaceInformation> {
@@ -152,7 +151,6 @@ impl WorkspaceConfiguration {
     }
 
     fn write_file(&self) -> Result<()> {
-        // Todo: Before writing out changes, write to a temp file
 
         let file = File::options()
             .truncate(true)

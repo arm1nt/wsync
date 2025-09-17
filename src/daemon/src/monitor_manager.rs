@@ -6,6 +6,7 @@ use std::process::{Child, Command, Stdio};
 use std::collections::hash_map::Entry;
 use std::fmt::{Display, Formatter};
 use log::debug;
+use wsync_config::{config, ConfigKey};
 use crate::domain::models::WorkspaceInformation;
 use crate::util::constants::MONITOR_EXECUTABLE_ENV_VAR;
 
@@ -36,9 +37,10 @@ pub(crate) struct MonitorManager {
 impl MonitorManager {
 
     pub(crate) fn init() -> Result<Self> {
-        let monitor_executable = env::var(MONITOR_EXECUTABLE_ENV_VAR).map_err(|_| {
-            Error::new(format!("{MONITOR_EXECUTABLE_ENV_VAR} env var not set"))
-        })?;
+        let monitor_executable = config()
+            .get_string(ConfigKey::MonitorExecutablePath)
+            .ok_or(Error::new("Config does not specify a path to a monitor executable".to_string()))?
+            .clone();
 
         let executable_path = Path::new(&monitor_executable);
         if !executable_path.exists() {
