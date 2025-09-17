@@ -140,7 +140,7 @@ pub fn init_config() -> Result<()> {
     for cfg_line in reader.lines() {
         let components = get_cfg_entry_components(cfg_line?)?;
 
-        let key = ConfigKey::from_str(components.0.as_str()).map_err(|e| {
+        let key = ConfigKey::from_str(components.0.as_str()).map_err(|_e| {
             Error::MalformedConfigFile(format!("Invalid config key '{}' found!", components.0))
         })?;
 

@@ -10,3 +10,4 @@ serde = { version = "1.0.219", features = ["derive"] }
 
 daemon-interface = { path = "../../lib/daemon-interface" }
 daemon-client = { path = "../../lib/daemon-client" }
+wsync-config = { path = "../../lib/wsync-config" }
