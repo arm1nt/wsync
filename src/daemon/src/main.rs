@@ -1,9 +1,7 @@
 use std::sync::{Arc, Mutex};
-use std::{env, thread};
-use std::fmt::format;
-use std::fs::{File, OpenOptions};
+use std::thread;
+use std::fs::File;
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use daemonize::Daemonize;
 use log::{error, info, warn};
@@ -13,7 +11,6 @@ use wsync_config::{config, ConfigKey};
 use crate::domain::Error;
 use crate::domain::socket::UnlinkingListener;
 use crate::handlers::handlers::handle_request;
-use crate::util::constants::SERVER_SOCKET_PATH_ENV_VAR;
 use crate::util::error_exit;
 use crate::util::log::setup_logging;
 use crate::watchdog::watchdog;
@@ -30,7 +27,7 @@ const MAX_CONSECUTIVE_CONNECTION_FAILURES: i32 = 10;
 
 fn sigint_handler(shutdown: Arc<AtomicBool>) {
     shutdown.store(true, Ordering::Relaxed);
-    let _ = UnixStream::connect(PathBuf::from(env::var(SERVER_SOCKET_PATH_ENV_VAR).unwrap()));
+    let _ = UnixStream::connect(config().get_path(ConfigKey::DaemonCommandSocketPath).unwrap());
 }
 
 fn daemonize_process() -> Result<(), Error> {

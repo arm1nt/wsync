@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::env;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -8,7 +7,6 @@ use std::fmt::{Display, Formatter};
 use log::debug;
 use wsync_config::{config, ConfigKey};
 use crate::domain::models::WorkspaceInformation;
-use crate::util::constants::MONITOR_EXECUTABLE_ENV_VAR;
 
 type Result<T> = std::result::Result<T, Error>;
 

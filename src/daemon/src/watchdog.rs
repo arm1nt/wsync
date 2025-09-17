@@ -1,11 +1,10 @@
 use std::collections::HashMap;
-use std::env;
 use std::sync::{Arc, Mutex, TryLockError};
 use std::thread::sleep;
 use std::time::Duration;
 use log::{debug, error, info, warn};
+use wsync_config::{config, ConfigKey};
 use crate::daemon_state::DaemonState;
-use crate::util::constants::SERVER_SOCKET_PATH_ENV_VAR;
 use crate::util::error_exit;
 
 const DEFAULT_WATCHDOG_INTERVAL_SECONDS: Duration = Duration::from_secs(60);
@@ -112,7 +111,7 @@ pub(crate) fn watchdog(state: Arc<Mutex<DaemonState>>) {
 }
 
 fn terminate() -> ! {
-    if let Ok(val) = env::var(SERVER_SOCKET_PATH_ENV_VAR) {
+    if let Some(val) = config().get_string(ConfigKey::DaemonCommandSocketPath) {
         let _ = std::fs::remove_file(val);
     }
     error_exit::<String>(None);

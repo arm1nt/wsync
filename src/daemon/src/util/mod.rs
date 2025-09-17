@@ -1,4 +1,3 @@
-pub(crate) mod constants;
 pub(crate) mod log;
 
 use std::process;

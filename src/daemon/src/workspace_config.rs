@@ -1,11 +1,9 @@
-use std::env;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use wsync_config::{config, ConfigKey};
 use crate::domain::models::{RemoteWorkspace, WorkspaceInformation};
-use crate::util::constants::WS_CONFIG_ENV_VAR;
 
 type Result<T> = std::result::Result<T, Error>;
 
