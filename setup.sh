@@ -49,12 +49,19 @@ prepare_environment() {
     echo "[ERROR] Failed to create the '$HOME/.wsync/log' directory!"
     exit 1;
   fi
+
+  if [[ ! -f "$WS_CONFIG_DIR/wsync-ws-config.json" ]]; then
+    if ! touch "$WS_CONFIG_DIR/wsync-ws-config.json" ; then
+      echo "[ERROR] Failed to create workspaces config file!";
+      exit 1;
+    fi
+
+    echo "[]" >> "$WS_CONFIG_DIR/wsync-ws-config.json";
+  fi
 }
 
 # Check that all required dependencies are installed on the system
 check_environment
-
-prepare_environment
 
 MODE="release"
 TARGET_DIR="./build"
@@ -145,6 +152,8 @@ for crate_dir in "${CRATES[@]}"; do
   echo ">> cargo build --manifest-path \"$manifest_path\" ${build_flags[*]}"
   cargo build --manifest-path "$manifest_path" "${build_flags[@]}"
 done
+
+prepare_environment
 
 # Check that we can find the monitor executable
 PROJECT_PATH=$(pwd)
