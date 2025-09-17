@@ -1,11 +1,16 @@
 use std::sync::{Arc, Mutex};
 use std::{env, thread};
+use std::fmt::format;
+use std::fs::{File, OpenOptions};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use daemonize::Daemonize;
 use log::{error, info, warn};
 use uuid::Uuid;
 use daemon_state::DaemonState;
+use wsync_config::{config, ConfigKey};
+use crate::domain::Error;
 use crate::domain::socket::UnlinkingListener;
 use crate::handlers::handlers::handle_request;
 use crate::util::constants::SERVER_SOCKET_PATH_ENV_VAR;
@@ -26,6 +31,32 @@ const MAX_CONSECUTIVE_CONNECTION_FAILURES: i32 = 10;
 fn sigint_handler(shutdown: Arc<AtomicBool>) {
     shutdown.store(true, Ordering::Relaxed);
     let _ = UnixStream::connect(PathBuf::from(env::var(SERVER_SOCKET_PATH_ENV_VAR).unwrap()));
+}
+
+fn daemonize_process() -> Result<(), Error> {
+    let log_dir_path = config()
+        .get_path(ConfigKey::LogDirectory)
+        .ok_or(Error::new("Config does not specify a path for the log directory".to_string()))?;
+
+    let stdout_path = log_dir_path.join("WsyncDaemon.out");
+    let stderr_path = log_dir_path.join("WsyncDaemon.err");
+
+    let mut binding = File::options();
+    let file_options = binding.write(true).truncate(false).create(true);
+    let stdout = file_options
+        .open(stdout_path)
+        .map_err(|e| Error::new(format!("Unable to open stdout log file: {e}")))?;
+    let stderr = file_options
+        .open(stderr_path)
+        .map_err(|e| Error::new(format!("Unable to open stderr log file: {e}")))?;
+
+    let daemonize = Daemonize::new()
+        .stdout(stdout)
+        .stderr(stderr);
+
+    daemonize
+        .start()
+        .map_err(|e| Error::new(format!("{e}")))
 }
 
 fn get_server_socket() -> UnlinkingListener {
@@ -80,6 +111,14 @@ fn server_loop(state: Arc<Mutex<DaemonState>>, shutdown: Arc<AtomicBool>) {
 fn main() {
     println!("Starting wsync daemon...");
     setup_logging();
+
+    let _ = wsync_config::init_config().map_err(|e| {
+        error_exit(Some(format!("Failed to initialize config: {e}")))
+    });
+
+    daemonize_process().unwrap_or_else(|e| {
+        error_exit(Some(format!("Failed to daemonize: {e:?}")))
+    });
 
     let state: Arc<Mutex<DaemonState>> = DaemonState::init();
     state.lock().unwrap().restore();

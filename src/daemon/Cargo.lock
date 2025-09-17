@@ -103,11 +103,13 @@ dependencies = [
  "ctrlc",
  "daemon-client",
  "daemon-interface",
+ "daemonize",
  "log",
  "log4rs",
  "serde",
  "serde_json",
  "uuid",
+ "wsync-config",
 ]
 
 [[package]]
@@ -126,6 +128,15 @@ dependencies = [
  "serde_json",
  "strum",
  "strum_macros",
+]
+
+[[package]]
+name = "daemonize"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab8bfdaacb3c887a54d41bdf48d3af8873b3f5566469f8ba21b92057509f116e"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -874,6 +885,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f42320e61fe2cfd34354ecb597f86f413484a798ba44a8ca1165c58d42da6c1"
 dependencies = [
  "bitflags",
+]
+
+[[package]]
+name = "wsync-config"
+version = "0.1.0"
+dependencies = [
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
