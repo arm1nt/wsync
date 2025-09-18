@@ -6,8 +6,6 @@ remote systems.
 
 ## Prerequisites
 
---------------------------
-
 To install and run `wsync` on your machine, the following programs need to be installed and in your system's PATH:
 
 - `cargo`: Rust's package manager
@@ -15,8 +13,6 @@ To install and run `wsync` on your machine, the following programs need to be in
 
 
 ## How to use
-
---------------------------
 
 Before you can start to use `wsync`, you must complete some mandatory setup steps. To simplify this, a setup bash-script
 is provided that automates those steps.
@@ -48,9 +44,7 @@ However, if you want to perform the setup steps manually, do the following:
 
 ## Architecture
 
---------------------------
 ![wsync architecture](./images/wsync-architecture.png)
-
 
 #### daemon
 
