@@ -11,6 +11,7 @@ use crate::util::error_exit;
 
 mod util;
 mod linux;
+mod macos;
 mod sync;
 mod models;
 
@@ -67,6 +68,8 @@ fn main() {
 
     if cfg!(target_os = "linux") {
         linux::run_fs_listener(workspace);
+    } else if cfg!(target_os = "macos") {
+        macos::run_fs_listener(workspace);
     } else {
         panic!("OS not supported (yet)");
     }

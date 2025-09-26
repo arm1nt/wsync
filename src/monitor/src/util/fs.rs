@@ -57,3 +57,25 @@ pub(crate) fn get_subdir_names(dir: &PathBuf) -> Result<Vec<PathBuf>> {
 pub(crate) fn accepted_filetype(path: &FileType) -> bool {
     path.is_dir()
 }
+
+pub(crate) fn strip_ws_root_prefix(ws_root: &PathBuf, abs_path: &PathBuf) -> Result<Option<PathBuf>> {
+
+    if !abs_path.is_absolute() {
+        return Err(Error::new(format!("'{:?}' is not absolute!", abs_path)));
+    }
+
+    if !abs_path.starts_with(ws_root) {
+        return Err(Error::new(format!("'{:?}' is not in the workspace", abs_path)));
+    }
+
+    if ws_root == abs_path {
+        return Ok(None);
+    }
+
+    match abs_path.strip_prefix(ws_root) {
+        Ok(stripped) => Ok(Some(PathBuf::from(stripped))),
+        Err(e) => {
+            Err(Error::new(format!("Unable to remove prefix: {:?}", e)))
+        }
+    }
+}
